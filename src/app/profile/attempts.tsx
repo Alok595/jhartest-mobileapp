@@ -14,7 +14,23 @@ export default function AttemptsHistoryScreen() {
     setLoading(true);
     const data = await fetchUserAttempts();
     if (data && Array.isArray(data)) {
-      setAttempts(data);
+      const grouped: Record<string, any[]> = {};
+      data.forEach(a => {
+        if (!grouped[a.testId]) grouped[a.testId] = [];
+        grouped[a.testId].push(a);
+      });
+      let processed: any[] = [];
+      Object.keys(grouped).forEach(testId => {
+        const testAttempts = grouped[testId].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        testAttempts.forEach((a, idx) => {
+          a.attemptNumber = idx + 1;
+          a.totalAttempts = testAttempts.length;
+          processed.push(a);
+        });
+      });
+      processed.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      setAttempts(processed);
     }
     setLoading(false);
   };
@@ -70,12 +86,18 @@ export default function AttemptsHistoryScreen() {
               style={styles.card} 
               activeOpacity={0.7}
               onPress={() => {
-                 router.push({ pathname: '/result/[id]', params: { id: attempt.id } });
+                 router.push({ 
+                   pathname: '/test/[id]', 
+                   params: { id: attempt.testId, viewMode: 'review', attemptId: attempt.id } 
+                 });
               }}
             >
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
-                  <Text style={styles.testTitle} numberOfLines={1}>{attempt.testTitle || 'Mock Test'}</Text>
+                  <Text style={styles.testTitle} numberOfLines={1}>
+                    {attempt.testTitle || 'Mock Test'} 
+                    {attempt.totalAttempts > 1 ? ` (Attempt ${attempt.attemptNumber})` : ''}
+                  </Text>
                   <View style={styles.dateRow}>
                     <Calendar size={12} color="#6B7280" />
                     <Text style={styles.dateText}>{formatDate(attempt.createdAt)}</Text>

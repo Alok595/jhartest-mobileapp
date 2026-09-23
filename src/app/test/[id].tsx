@@ -36,7 +36,7 @@ import {
   ZoomIn,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import { submitAttempt, getApiBaseUrl, fetchUserAttempts, startAttempt, syncAttempt } from '../../services/api';
+import { submitAttempt, getApiBaseUrl, fetchUserAttempts, startAttempt, syncAttempt, fetchAttemptDetails } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -44,7 +44,7 @@ import { SEED_QUESTIONS } from '../../constants/seedData';
 
 
 export default function MobileTestAttemptScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, viewMode: initialViewMode, attemptId: reviewAttemptId } = useLocalSearchParams();
   const router = useRouter();
   const { user, refreshProfile } = useAuth();
 
@@ -66,7 +66,7 @@ export default function MobileTestAttemptScreen() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [viewMode, setViewMode] = useState<'exam' | 'review'>('exam');
+  const [viewMode, setViewMode] = useState<'exam' | 'review'>((initialViewMode as any) || 'exam');
   const [reviewFilter, setReviewFilter] = useState<'all' | 'incorrect' | 'correct' | 'unattempted'>('all');
   const [selectedDrawerSection, setSelectedDrawerSection] = useState<string>('ALL');
   const [testResult, setTestResult] = useState<{
@@ -123,7 +123,7 @@ export default function MobileTestAttemptScreen() {
         setLoading(true);
         // Initialize Attempt
         let savedState: any = null;
-        if (id) {
+        if (id && (!initialViewMode || initialViewMode !== 'review')) {
           const attempt = await startAttempt(id as string);
           if (attempt && attempt.id) {
             setAttemptId(attempt.id);
@@ -132,6 +132,34 @@ export default function MobileTestAttemptScreen() {
                if (savedState.answers) setAnswers(savedState.answers);
                if (savedState.timeLeft) setTimeLeft(savedState.timeLeft);
                if (savedState.currentQ) setCurrentQ(savedState.currentQ);
+            }
+          }
+        } else if (initialViewMode === 'review' && reviewAttemptId) {
+          const attemptRes = await fetchAttemptDetails(reviewAttemptId as string);
+          if (attemptRes) {
+            setAttemptId(attemptRes.id);
+            if (attemptRes.answers) setAnswers(attemptRes.answers);
+            
+            const result = {
+              score: Number(attemptRes.score || 0),
+              totalMarks: attemptRes.maxMarks || 0,
+              correct: attemptRes.correct || 0,
+              incorrect: attemptRes.incorrect || 0,
+              unanswered: attemptRes.unanswered || 0,
+              accuracy: attemptRes.accuracy || 0,
+              timeTaken: attemptRes.timeSpent || 0,
+              rank: attemptRes.rank || 1,
+              totalCandidates: attemptRes.totalCandidates || 1,
+              percentile: attemptRes.percentile || 100,
+            };
+            setTestResult(result);
+            
+            if (attemptRes.attemptNumber) {
+              setAttemptInfo({
+                 attemptNumber: attemptRes.attemptNumber,
+                 maxAttempts: attemptRes.maxAttempts || 2,
+                 remainingAttempts: attemptRes.remainingAttempts || 0,
+              });
             }
           }
         }
