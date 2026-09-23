@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FileText, ChevronRight, ArrowLeft, Play } from 'lucide-react-native';
-import { getApiBaseUrl } from '../../../services/api';
+import { getApiBaseUrl, getCachedData, setCachedData } from '../../../services/api';
 
 export default function SubcategoryExploreScreen() {
   const { id } = useLocalSearchParams();
@@ -15,23 +15,44 @@ export default function SubcategoryExploreScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const initInstantData = async () => {
+      // 1. Instant RAM cache load (< 1ms)
+      try {
+        const [cachedSub, cachedExams, cachedTs] = await Promise.all([
+          getCachedData<any>(`subcategory_${id}`),
+          getCachedData<any[]>('all_exams'),
+          getCachedData<any[]>('test_series')
+        ]);
+        if (cachedSub) {
+          setSubcategory(cachedSub);
+          setLoading(false);
+        }
+        if (cachedExams) {
+          setExams(cachedExams.filter((e: any) => e.subcategoryId === id));
+        }
+        if (cachedTs) {
+          setTestSeries(cachedTs);
+        }
+      } catch (e) {}
+
+      // 2. Background fresh fetch
       try {
         const subRes = await fetch(`${getApiBaseUrl()}/subcategories/${id}`);
         const subData = await subRes.json();
         setSubcategory(subData);
+        setCachedData(`subcategory_${id}`, subData);
 
-        // Fetch all exams, we will filter locally for now (in real app backend should filter)
         const examsRes = await fetch(`${getApiBaseUrl()}/exams`);
         const allExams = await examsRes.json();
+        setCachedData('all_exams', allExams);
         const subExams = allExams.filter((e: any) => e.subcategoryId === id);
         setExams(subExams);
         
-        // Fetch test series
         if (subExams.length > 0) {
           const tsRes = await fetch(`${getApiBaseUrl()}/test-series`);
           const allTs = await tsRes.json();
           setTestSeries(allTs);
+          setCachedData('test_series', allTs);
         }
       } catch (err) {
         console.error(err);
@@ -41,7 +62,7 @@ export default function SubcategoryExploreScreen() {
     };
     
     if (id) {
-      fetchData();
+      initInstantData();
     }
   }, [id]);
 

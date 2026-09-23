@@ -24,7 +24,7 @@ import {
 } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Clipboard from 'expo-clipboard';
-import { getApiBaseUrl } from '../../../services/api';
+import { getApiBaseUrl, getCachedData, setCachedData } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
 
 export default function FolderExploreScreen() {
@@ -57,6 +57,7 @@ export default function FolderExploreScreen() {
       const res = await fetch(`${getApiBaseUrl()}/folders/${id}`);
       const data = await res.json();
       setFolder(data);
+      setCachedData(`folder_${id}`, data);
       return data;
     } catch (err) {
       console.error(err);
@@ -113,7 +114,19 @@ export default function FolderExploreScreen() {
   };
 
   const initialize = async () => {
-    setLoading(true);
+    // 1. Instant Cache check (< 1ms)
+    try {
+      const cached = await getCachedData<any>(`folder_${id}`);
+      if (cached) {
+        setFolder(cached);
+        if (!cached.isPaid) {
+          setHasAccess(true);
+        }
+        setLoading(false);
+      }
+    } catch (e) {}
+
+    // 2. Background fresh fetch
     const fData = await fetchFolder();
     if (fData?.isPaid) {
       await fetchPaymentSettings();

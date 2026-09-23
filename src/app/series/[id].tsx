@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { PlayCircle, Clock, FileText, CheckCircle, ShieldAlert, ArrowLeft, ShoppingCart, Award, ChevronRight, Languages, CheckCircle2, RotateCcw } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getApiBaseUrl, fetchUserAttempts } from '../../services/api';
+import { getApiBaseUrl, fetchUserAttempts, getCachedData, setCachedData } from '../../services/api';
 
 export default function SeriesDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -16,10 +16,31 @@ export default function SeriesDetailScreen() {
   const [globalMaxAttempts, setGlobalMaxAttempts] = useState<number>(3);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const initInstantData = async () => {
+      // 1. Instant Cache Load (0ms click render)
       try {
-        setLoading(true);
-        // Fetch series, tests, user past attempts, and exam settings in parallel
+        const [cachedAllSeries, cachedTests] = await Promise.all([
+          getCachedData<any[]>('test_series'),
+          getCachedData<any[]>(`series_tests_${id}`)
+        ]);
+
+        if (cachedAllSeries && Array.isArray(cachedAllSeries)) {
+          const matched = cachedAllSeries.find((s: any) => s.id === id);
+          if (matched) {
+            setSeries(matched);
+            setLoading(false);
+          }
+        }
+        if (cachedTests && Array.isArray(cachedTests) && cachedTests.length > 0) {
+          setTests(cachedTests);
+          setLoading(false);
+        }
+      } catch (e) {
+        // Fallback to network
+      }
+
+      // 2. Background fresh fetch (silently updates data)
+      try {
         const [sRes, tRes, userAttData, setRes] = await Promise.all([
           fetch(`${getApiBaseUrl()}/test-series`).catch(() => null),
           fetch(`${getApiBaseUrl()}/test-series/${id}/tests`).catch(() => null),
@@ -29,8 +50,9 @@ export default function SeriesDetailScreen() {
 
         if (sRes && sRes.ok) {
           const all = await sRes.json();
+          setCachedData('test_series', all);
           const item = all.find((s: any) => s.id === id);
-          setSeries(item);
+          if (item) setSeries(item);
         }
 
         let currentGlobalMax = 2;
@@ -44,7 +66,14 @@ export default function SeriesDetailScreen() {
 
         if (tRes && tRes.ok) {
           const tList = await tRes.json();
-          setTests(Array.isArray(tList) ? tList.map(t => ({ ...t, maxAttempts: t.maxAttempts !== undefined ? t.maxAttempts : currentGlobalMax })) : []);
+          if (Array.isArray(tList)) {
+            const formatted = tList.map(t => ({
+              ...t,
+              maxAttempts: t.maxAttempts !== undefined ? t.maxAttempts : currentGlobalMax
+            }));
+            setTests(formatted);
+            setCachedData(`series_tests_${id}`, formatted);
+          }
         }
 
         if (Array.isArray(userAttData)) {
@@ -56,8 +85,9 @@ export default function SeriesDetailScreen() {
         setLoading(false);
       }
     };
+
     if (id) {
-      fetchData();
+      initInstantData();
     }
   }, [id]);
 
