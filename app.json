@@ -38,8 +38,13 @@
       "expo-video"
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8caef0c7-23bc-4d3e-ada2-ff4503200575"
+      }
     }
   }
 }

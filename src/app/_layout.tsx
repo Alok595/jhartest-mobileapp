@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Dimensions, Animated, Easing } from 'react-native';
+import { Image } from 'expo-image';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { useVideoPlayer, VideoView } from 'expo-video';
 import { AuthProvider } from '../context/AuthContext';
 
 const { width, height } = Dimensions.get('window');
@@ -11,74 +11,66 @@ const { width, height } = Dimensions.get('window');
 // Keep native splash screen held until React Native layout mounts
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const videoSource = require('../../assets/images/splashscrren2.mp4');
+const brandLogo = require('../../assets/images/icon.png');
 
 export default function RootLayout() {
-  const [isSplashVideoDone, setIsSplashVideoDone] = useState(false);
+  const [isSplashDone, setIsSplashDone] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const logoScaleAnim = useRef(new Animated.Value(0.85)).current;
   const textFadeAnim = useRef(new Animated.Value(0)).current;
-  const textScaleAnim = useRef(new Animated.Value(0.95)).current;
-
-  // Initialize expo-video player directly
-  const player = useVideoPlayer(videoSource, (p) => {
-    p.loop = false;
-    p.play();
-  });
+  const textTranslateAnim = useRef(new Animated.Value(10)).current;
 
   const finishSplash = () => {
     Animated.timing(fadeAnim, {
       toValue: 0,
-      duration: 500,
+      duration: 400,
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start(() => {
-      setIsSplashVideoDone(true);
+      setIsSplashDone(true);
     });
   };
 
   useEffect(() => {
-    // Hide native splash screen so custom video splash renders immediately
+    // Hide native splash screen so custom branding renders immediately
     SplashScreen.hideAsync().catch(() => {});
 
-    // Listen for video completion
-    let subscription: any = null;
-    if (player) {
-      subscription = player.addListener('playToEnd', () => {
-        finishSplash();
-      });
-    }
-
-    // Smooth entrance animation for App Name & Slogan
+    // Premium entrance animation for Brand Logo & Slogan
     Animated.parallel([
-      Animated.timing(textFadeAnim, {
+      Animated.spring(logoScaleAnim, {
         toValue: 1,
-        duration: 700,
-        delay: 100,
+        tension: 50,
+        friction: 7,
         useNativeDriver: true,
       }),
-      Animated.timing(textScaleAnim, {
+      Animated.timing(textFadeAnim, {
         toValue: 1,
-        duration: 700,
-        delay: 100,
+        duration: 600,
+        delay: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(textTranslateAnim, {
+        toValue: 0,
+        duration: 600,
+        delay: 200,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
     ]).start();
 
-    // Fallback timer to unmount splash screen cleanly after video duration
+    // Smooth transition to main app after short brand showcase (1.5s)
     const timer = setTimeout(() => {
       finishSplash();
-    }, 2800);
+    }, 1500);
 
     return () => {
-      if (subscription) subscription.remove();
       clearTimeout(timer);
     };
-  }, [player]);
+  }, []);
 
   return (
     <AuthProvider>
-      <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+      <View style={{ flex: 1, backgroundColor: '#0F172A' }}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen
@@ -94,35 +86,39 @@ export default function RootLayout() {
           <Stack.Screen name="+not-found" />
         </Stack>
 
-        {/* Custom Fullscreen Video Splash Screen */}
-        {!isSplashVideoDone && (
+        {/* High-Performance Crash-Proof Splash Screen */}
+        {!isSplashDone && (
           <Animated.View style={[styles.splashContainer, { opacity: fadeAnim }]}>
-            <StatusBar style="light" hidden={false} />
+            <StatusBar style="light" />
             
-            <VideoView
-              style={styles.splashVideo}
-              player={player}
-              nativeControls={false}
-              contentFit="cover"
-            />
-
-            {/* Subtle Contrast Gradient / Overlay */}
-            <View style={styles.overlayGradient} />
-
-            {/* Brand Title & Slogan Overlay */}
             <Animated.View
               style={[
                 styles.brandWrapper,
                 {
-                  opacity: textFadeAnim,
-                  transform: [{ scale: textScaleAnim }],
+                  transform: [{ scale: logoScaleAnim }],
                 },
               ]}
             >
-              <Text style={styles.brandName}>
-                jhar<Text style={styles.brandNameHighlight}>test</Text>
-              </Text>
-              <Text style={styles.brandSlogan}>prep smarter, score higher</Text>
+              <Image
+                source={brandLogo}
+                style={styles.logoImage}
+                contentFit="contain"
+                transition={200}
+              />
+              
+              <Animated.View
+                style={{
+                  opacity: textFadeAnim,
+                  transform: [{ translateY: textTranslateAnim }],
+                  alignItems: 'center',
+                  marginTop: 16,
+                }}
+              >
+                <Text style={styles.brandName}>
+                  jhar<Text style={styles.brandNameHighlight}>test</Text>
+                </Text>
+                <Text style={styles.brandSlogan}>prep smarter • score higher</Text>
+              </Animated.View>
             </Animated.View>
           </Animated.View>
         )}
@@ -140,58 +136,41 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 99999,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  splashVideo: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: width,
-    height: height,
-  },
-  overlayGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.15)',
-  },
   brandWrapper: {
-    position: 'absolute',
-    bottom: height * 0.12,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
-    zIndex: 10,
+  },
+  logoImage: {
+    width: 110,
+    height: 110,
+    borderRadius: 24,
+    shadowColor: '#0072FF',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
   },
   brandName: {
-    fontSize: 44,
+    fontSize: 42,
     fontWeight: '900',
-    color: '#0072FF',
+    color: '#38BDF8',
     letterSpacing: 1.5,
     textTransform: 'lowercase',
-    textShadowColor: 'rgba(255, 255, 255, 0.9)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 10,
   },
   brandNameHighlight: {
-    color: '#00C853',
+    color: '#4ADE80',
   },
   brandSlogan: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginTop: 4,
-    letterSpacing: 1.2,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#94A3B8',
+    marginTop: 6,
+    letterSpacing: 1.5,
     textTransform: 'lowercase',
     textAlign: 'center',
-    textShadowColor: 'rgba(255, 255, 255, 0.9)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
   },
 });
