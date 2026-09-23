@@ -108,7 +108,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setIsLoading(true);
       const redirectUrl = makeRedirectUri({
-        path: '/auth/callback',
+        scheme: 'jhartestapp',
+        path: 'auth/callback',
       });
       console.log("EXPO REDIRECT URL GENERATED:", redirectUrl);
       

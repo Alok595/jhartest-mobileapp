@@ -293,7 +293,6 @@ const styles = StyleSheet.create({
   thumbnailImage: {
     width: '100%',
     height: '100%',
-    contentFit: 'contain',
   },
   thumbnailPlaceholder: {
     flex: 1,

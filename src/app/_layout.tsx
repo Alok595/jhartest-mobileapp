@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Animated, Easing, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -12,6 +12,46 @@ const { width, height } = Dimensions.get('window');
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const brandLogo = require('../../assets/images/icon.png');
+
+// High-resilience Error Boundary to prevent any hard Android OS crashes
+class AppErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('App Uncaught Crash Intercepted:', error, errorInfo);
+    SplashScreen.hideAsync().catch(() => {});
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>App encountered an issue</Text>
+          <Text style={styles.errorSubtitle}>
+            {this.state.error?.message || 'A temporary error occurred while starting up.'}
+          </Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => this.setState({ hasError: false, error: null })}
+          >
+            <Text style={styles.retryText}>Reload App</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function RootLayout() {
   const [isSplashDone, setIsSplashDone] = useState(false);
@@ -69,66 +109,100 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <AuthProvider>
-      <View style={{ flex: 1, backgroundColor: '#0F172A' }}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="(auth)/login"
-            options={{
-              presentation: 'modal',
-              headerShown: true,
-              headerTitle: 'Student Login',
-              headerBackTitle: 'Cancel',
-            }}
-          />
-          <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" />
-        </Stack>
+    <AppErrorBoundary>
+      <AuthProvider>
+        <View style={{ flex: 1, backgroundColor: '#0F172A' }}>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="(auth)/login"
+              options={{
+                presentation: 'modal',
+                headerShown: true,
+                headerTitle: 'Student Login',
+                headerBackTitle: 'Cancel',
+              }}
+            />
+            <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
+            <Stack.Screen name="+not-found" />
+          </Stack>
 
-        {/* High-Performance Crash-Proof Splash Screen */}
-        {!isSplashDone && (
-          <Animated.View style={[styles.splashContainer, { opacity: fadeAnim }]}>
-            <StatusBar style="light" />
-            
-            <Animated.View
-              style={[
-                styles.brandWrapper,
-                {
-                  transform: [{ scale: logoScaleAnim }],
-                },
-              ]}
-            >
-              <Image
-                source={brandLogo}
-                style={styles.logoImage}
-                contentFit="contain"
-                transition={200}
-              />
+          {/* High-Performance Crash-Proof Splash Screen */}
+          {!isSplashDone && (
+            <Animated.View style={[styles.splashContainer, { opacity: fadeAnim }]}>
+              <StatusBar style="light" />
               
               <Animated.View
-                style={{
-                  opacity: textFadeAnim,
-                  transform: [{ translateY: textTranslateAnim }],
-                  alignItems: 'center',
-                  marginTop: 16,
-                }}
+                style={[
+                  styles.brandWrapper,
+                  {
+                    transform: [{ scale: logoScaleAnim }],
+                  },
+                ]}
               >
-                <Text style={styles.brandName}>
-                  jhar<Text style={styles.brandNameHighlight}>test</Text>
-                </Text>
-                <Text style={styles.brandSlogan}>prep smarter • score higher</Text>
+                <Image
+                  source={brandLogo}
+                  style={styles.logoImage}
+                  contentFit="contain"
+                  transition={200}
+                />
+                
+                <Animated.View
+                  style={{
+                    opacity: textFadeAnim,
+                    transform: [{ translateY: textTranslateAnim }],
+                    alignItems: 'center',
+                    marginTop: 16,
+                  }}
+                >
+                  <Text style={styles.brandName}>
+                    jhar<Text style={styles.brandNameHighlight}>test</Text>
+                  </Text>
+                  <Text style={styles.brandSlogan}>prep smarter • score higher</Text>
+                </Animated.View>
               </Animated.View>
             </Animated.View>
-          </Animated.View>
-        )}
-      </View>
-      <StatusBar style="auto" />
-    </AuthProvider>
+          )}
+        </View>
+        <StatusBar style="auto" />
+      </AuthProvider>
+    </AppErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
+  errorContainer: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#F87171',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorSubtitle: {
+    fontSize: 14,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  retryBtn: {
+    backgroundColor: '#0072FF',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
   splashContainer: {
     position: 'absolute',
     top: 0,

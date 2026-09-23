@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "jhartest",
-    "slug": "jhartest-app",
+    "slug": "jhartest-mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -43,7 +43,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "8caef0c7-23bc-4d3e-ada2-ff4503200575"
+        "projectId": "7d323294-32bb-42af-b914-0dee920aaa37"
       }
     }
   }
