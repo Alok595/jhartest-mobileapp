@@ -24,7 +24,7 @@ import {
 } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Clipboard from 'expo-clipboard';
-import { getApiBaseUrl, getCachedData, setCachedData } from '../../../services/api';
+import { getApiBaseUrl, getCachedData, setCachedData, apiClient } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
 
 export default function FolderExploreScreen() {
@@ -66,21 +66,14 @@ export default function FolderExploreScreen() {
   };
 
   const checkAccess = async (folderData: any) => {
-    if (!folderData.isPaid) {
+    if (!folderData?.isPaid) {
       setHasAccess(true);
       return;
     }
 
-    // Try to check access with available info
     const userId = user?.id || '';
     const phone = user?.phone || studentPhone || '';
     const email = user?.email || studentEmail || '';
-
-    if (!userId && !phone && !email) {
-      setHasAccess(false);
-      setAccessReason('NO_ORDER');
-      return;
-    }
 
     try {
       const qs = new URLSearchParams();
@@ -89,17 +82,16 @@ export default function FolderExploreScreen() {
       if (phone) qs.append('phone', phone);
       if (email) qs.append('email', email);
 
-      const res = await fetch(`${getApiBaseUrl()}/orders/check-access?${qs.toString()}`);
-      const data = await res.json();
-      if (data.success) {
-        setHasAccess(data.hasAccess);
-        if (!data.hasAccess) {
-          setAccessReason(data.reason);
-          setOrderData(data.order);
+      const res = await apiClient.get(`/orders/check-access?${qs.toString()}`);
+      if (res?.data?.success) {
+        setHasAccess(res.data.hasAccess);
+        if (!res.data.hasAccess) {
+          setAccessReason(res.data.reason || 'NO_ORDER');
+          setOrderData(res.data.order || null);
         }
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error checking folder access:', err);
     }
   };
 
@@ -139,7 +131,7 @@ export default function FolderExploreScreen() {
 
   useEffect(() => {
     if (id) initialize();
-  }, [id, user]);
+  }, [id, user?.id, user?.phone, user?.email]);
 
   const handleRefreshStatus = async () => {
     setRefreshing(true);
@@ -187,7 +179,34 @@ export default function FolderExploreScreen() {
     });
   };
 
+  const handleProceedToPayment = () => {
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please sign in to your student account first to enroll in this course and save your purchase.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Log In Now', onPress: () => router.push('/(auth)/login') }
+        ]
+      );
+      return;
+    }
+    setPaymentStep('payment');
+  };
+
   const submitPayment = async () => {
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please sign in to your student account first to submit your order.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Log In Now', onPress: () => router.push('/(auth)/login') }
+        ]
+      );
+      return;
+    }
+
     if (!studentName.trim() || !studentPhone.trim() || !transactionId.trim()) {
       Alert.alert('Required Fields', 'Please fill in Name, Phone, and 12-digit UTR/Transaction ID');
       return;
@@ -575,7 +594,7 @@ export default function FolderExploreScreen() {
 
               <TouchableOpacity 
                 style={styles.continuePaymentBtn} 
-                onPress={() => setPaymentStep('payment')}
+                onPress={handleProceedToPayment}
                 activeOpacity={0.85}
               >
                 <Text style={styles.continuePaymentBtnText}>Continue to Payment</Text>

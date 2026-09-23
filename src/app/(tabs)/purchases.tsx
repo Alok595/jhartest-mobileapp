@@ -28,6 +28,7 @@ import {
   HelpCircle,
   ArrowRight,
   BookOpen,
+  LogIn,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { fetchMyOrders } from '../../services/api';
@@ -282,7 +283,11 @@ export default function PurchasesTab() {
               activeOpacity={0.8}
               onPress={() => {
                 if (targetId) {
-                  router.push(`/explore/${typeRoute}/${targetId}` as any);
+                  if (isSeries) {
+                    router.push(`/series/${targetId}` as any);
+                  } else {
+                    router.push(`/explore/folder/${targetId}` as any);
+                  }
                 }
               }}
             >
@@ -315,6 +320,47 @@ export default function PurchasesTab() {
       </View>
     );
   };
+
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.headerTitle}>My Batches</Text>
+              <Text style={styles.headerSubtitle}>Student Enrolled Programs</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.loginRequiredContainer}>
+          <View style={styles.lockIconCircle}>
+            <Lock size={36} color="#0072FF" />
+          </View>
+          <Text style={styles.loginTitle}>Sign in to view My Batches</Text>
+          <Text style={styles.loginSub}>
+            Please log in to your student account to access your purchased batches, video courses, notes, and test series.
+          </Text>
+          <TouchableOpacity
+            style={styles.loginBtn}
+            activeOpacity={0.88}
+            onPress={() => router.push('/(auth)/login')}
+          >
+            <LinearGradient
+              colors={['#0072FF', '#0052D4']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.loginGradient}
+            >
+              <LogIn size={18} color="#FFFFFF" />
+              <Text style={styles.loginBtnText}>Log In / Register Now</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
