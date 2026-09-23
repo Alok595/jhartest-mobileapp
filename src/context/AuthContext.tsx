@@ -60,6 +60,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (session?.access_token) {
       setToken(session.access_token);
       setAuthToken(session.access_token);
+
+      // 1. Instantly populate user from Supabase session (0ms UI reflect!)
+      if (session.user) {
+        const metadata = session.user.user_metadata || {};
+        setUser({
+          id: session.user.id,
+          name: metadata.full_name || metadata.name || session.user.email?.split('@')[0] || 'Student',
+          email: session.user.email,
+          phone: session.user.phone || metadata.phone,
+          avatar: metadata.avatar_url,
+          role: metadata.role || 'STUDENT',
+        });
+        setIsLoading(false);
+      }
+
+      // 2. Fetch fresh backend profile & stats in background
       await refreshProfile();
     } else {
       setToken(null);
@@ -90,12 +106,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       setIsLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
 
       if (error) throw error;
+
+      if (data?.session) {
+        await handleSession(data.session);
+      }
+
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || 'Login failed' };
@@ -165,7 +186,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       setIsLoading(true);
-      const { error } = await supabase.auth.signUp({
+      const { data: signUpData, error } = await supabase.auth.signUp({
         email: data.email.trim().toLowerCase(),
         password: data.password,
         options: {
@@ -178,6 +199,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) throw error;
+
+      if (signUpData?.session) {
+        await handleSession(signUpData.session);
+      }
+
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || 'Registration failed' };
@@ -187,6 +213,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    setUser(null);
+    setToken(null);
+    setStats(null);
+    setAuthToken(null);
     try {
       await supabase.auth.signOut();
     } catch (e) {

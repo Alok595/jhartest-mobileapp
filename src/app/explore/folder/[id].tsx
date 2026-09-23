@@ -52,6 +52,14 @@ export default function FolderExploreScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  useEffect(() => {
+    if (user) {
+      if (user.name && !studentName) setStudentName(user.name);
+      if (user.phone && !studentPhone) setStudentPhone(user.phone);
+      if (user.email && !studentEmail) setStudentEmail(user.email);
+    }
+  }, [user]);
+
   const fetchFolder = async () => {
     try {
       const res = await fetch(`${getApiBaseUrl()}/folders/${id}`);
@@ -85,9 +93,12 @@ export default function FolderExploreScreen() {
       const res = await apiClient.get(`/orders/check-access?${qs.toString()}`);
       if (res?.data?.success) {
         setHasAccess(res.data.hasAccess);
-        if (!res.data.hasAccess) {
+        if (res.data.hasAccess) {
+          if (userId) setCachedData(`access_folder_${id}_${userId}`, true);
+        } else {
           setAccessReason(res.data.reason || 'NO_ORDER');
           setOrderData(res.data.order || null);
+          if (userId) setCachedData(`access_folder_${id}_${userId}`, false);
         }
       }
     } catch (err) {
@@ -113,6 +124,11 @@ export default function FolderExploreScreen() {
         setFolder(cached);
         if (!cached.isPaid) {
           setHasAccess(true);
+        } else if (user?.id) {
+          const cachedAccess = await getCachedData<boolean>(`access_folder_${id}_${user.id}`);
+          if (cachedAccess === true) {
+            setHasAccess(true);
+          }
         }
         setLoading(false);
       }
@@ -194,6 +210,56 @@ export default function FolderExploreScreen() {
     setPaymentStep('payment');
   };
 
+  const validatePaymentInputs = () => {
+    const cleanName = studentName.trim();
+    const rawPhone = studentPhone.trim().replace(/\D/g, '');
+    const cleanPhone = rawPhone.length === 12 && rawPhone.startsWith('91') ? rawPhone.slice(2) : rawPhone;
+    const cleanEmail = studentEmail.trim().toLowerCase();
+    const cleanTxn = transactionId.trim().replace(/\s+/g, '');
+
+    if (!cleanName || cleanName.length < 2) {
+      Alert.alert('Invalid Name', 'Please enter your full name (at least 2 characters).');
+      return null;
+    }
+
+    if (!cleanPhone || cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
+      Alert.alert(
+        'Invalid Phone Number',
+        'Please enter a valid 10-digit mobile number (e.g. 9876543210) to receive your enrollment confirmation.'
+      );
+      return null;
+    }
+
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address (e.g. student@gmail.com).');
+      return null;
+    }
+
+    if (!cleanTxn || cleanTxn.length < 8 || cleanTxn.length > 24) {
+      Alert.alert(
+        'Invalid UTR / Transaction ID',
+        'Please enter the 12-digit UTR or Transaction ID from your payment app (PhonePe, Google Pay, Paytm, or BHIM).'
+      );
+      return null;
+    }
+
+    // Guard against dummy/fake inputs
+    if (/^(.)\1+$/.test(cleanTxn) || cleanTxn === '12345678' || cleanTxn === '123456789012') {
+      Alert.alert(
+        'Invalid UTR Number',
+        'Please enter the genuine UTR / Transaction ID from your payment confirmation screen.'
+      );
+      return null;
+    }
+
+    return {
+      cleanName,
+      cleanPhone,
+      cleanEmail: cleanEmail || user?.email || '',
+      cleanTxn,
+    };
+  };
+
   const submitPayment = async () => {
     if (!user) {
       Alert.alert(
@@ -207,33 +273,24 @@ export default function FolderExploreScreen() {
       return;
     }
 
-    if (!studentName.trim() || !studentPhone.trim() || !transactionId.trim()) {
-      Alert.alert('Required Fields', 'Please fill in Name, Phone, and 12-digit UTR/Transaction ID');
-      return;
-    }
-    if (transactionId.trim().length < 8) {
-      Alert.alert('Invalid UTR', 'Please enter a valid Transaction/UTR ID from your payment receipt');
-      return;
-    }
+    const validated = validatePaymentInputs();
+    if (!validated) return;
 
     setSubmitting(true);
     try {
       const finalPrice = folder.discountPrice || folder.price;
-      const res = await fetch(`${getApiBaseUrl()}/orders`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user?.id,
-          folderId: id,
-          amount: finalPrice,
-          transactionId: transactionId.trim(),
-          studentName: studentName.trim(),
-          studentPhone: studentPhone.trim(),
-          studentEmail: studentEmail.trim(),
-          upiId: activeUpiId,
-        })
+      const res = await apiClient.post('/orders', {
+        userId: user?.id,
+        folderId: id,
+        amount: finalPrice,
+        transactionId: validated.cleanTxn,
+        studentName: validated.cleanName,
+        studentPhone: validated.cleanPhone,
+        studentEmail: validated.cleanEmail,
+        upiId: activeUpiId,
       });
-      const data = await res.json();
+
+      const data = res.data;
       if (data.success) {
         // Immediately transition UI to Pending state so the user sees the confirmation
         setHasAccess(false);

@@ -81,7 +81,10 @@ export default function HomeScreen() {
       if (cached && cached.length > 0) setBanners(cached);
     });
     getCachedData<any[]>('home_quick_actions').then(cached => {
-      if (cached && cached.length > 0) setQuickActions(cached);
+      if (cached && cached.length > 0) {
+        const sorted = [...cached].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+        setQuickActions(sorted);
+      }
     });
 
     // Background fresh fetch
@@ -94,8 +97,9 @@ export default function HomeScreen() {
 
     apiClient.get('/quick-actions').then(res => {
       if (res.data && res.data.length > 0) {
-        setQuickActions(res.data);
-        setCachedData('home_quick_actions', res.data);
+        const sorted = [...res.data].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+        setQuickActions(sorted);
+        setCachedData('home_quick_actions', sorted);
       }
     }).catch(() => console.log('Using fallback quick actions'));
   }, []);
