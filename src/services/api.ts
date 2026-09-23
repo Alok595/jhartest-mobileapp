@@ -13,23 +13,37 @@ export const getAuthToken = () => {
 };
 
 export const getApiBaseUrl = (): string => {
+  // If explicitly overridden via environment variable
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+
+  // Live deployed Vercel backend URL for production APK
+  const PRODUCTION_BACKEND_URL = 'https://jhartestt.vercel.app/api';
+
   // If running on web
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && window.location?.hostname) {
-      return `http://${window.location.hostname}:3000/api`;
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        return 'http://localhost:3000/api';
+      }
+      return `${window.location.origin}/api`;
     }
-    return 'http://localhost:3000/api';
+    return PRODUCTION_BACKEND_URL;
   }
 
-  // If running on Expo Go (Physical device or emulator)
-  const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
-  if (hostUri) {
-    const ip = hostUri.split(':')[0];
-    return `http://${ip}:3000/api`;
+  // If running in development with Expo Go (Physical device or emulator)
+  if (__DEV__) {
+    const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
+    if (hostUri) {
+      const ip = hostUri.split(':')[0];
+      return `http://${ip}:3000/api`;
+    }
+    return Platform.OS === 'android' ? 'http://10.0.2.2:3000/api' : 'http://localhost:3000/api';
   }
 
-  // Fallback default for Android Emulator or Localhost
-  return Platform.OS === 'android' ? 'http://10.0.2.2:3000/api' : 'http://localhost:3000/api';
+  // Production APK / Standalone build default
+  return PRODUCTION_BACKEND_URL;
 };
 
 export const apiClient = axios.create({
@@ -49,37 +63,104 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-/* ================= API CALLS ================= */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Categories
-export const getCategories = async () => {
+const memoryCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes fresh TTL
+
+export const getCachedData = async <T>(key: string): Promise<T | null> => {
+  // 1. Check ultra-fast RAM cache (< 1ms)
+  const inMemory = memoryCache.get(key);
+  if (inMemory) {
+    return inMemory.data as T;
+  }
+  // 2. Check disk cache
   try {
-    const res = await apiClient.get('/categories?active=true');
-    return res.data;
-  } catch (error) {
-    console.warn('Failed to fetch categories from server, using fallback', error);
-    return null;
+    const raw = await AsyncStorage.getItem(`cache_${key}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      memoryCache.set(key, { data: parsed.data, timestamp: parsed.timestamp });
+      return parsed.data as T;
+    }
+  } catch (e) {
+    // Ignore cache read errors
+  }
+  return null;
+};
+
+export const setCachedData = async (key: string, data: any) => {
+  const payload = { data, timestamp: Date.now() };
+  memoryCache.set(key, payload);
+  try {
+    await AsyncStorage.setItem(`cache_${key}`, JSON.stringify(payload));
+  } catch (e) {
+    // Ignore cache write errors
   }
 };
 
-// Test Series
-export const getTestSeries = async () => {
-  try {
-    const res = await apiClient.get('/test-series');
-    return res.data;
-  } catch (error) {
-    console.warn('Failed to fetch test series from server, using fallback', error);
-    return null;
+/* ================= API CALLS ================= */
+
+// Categories (with instant cache + background revalidate)
+export const getCategories = async () => {
+  const cached = await getCachedData<any[]>('categories');
+  
+  // Background fetch
+  const fetchPromise = apiClient.get('/categories?active=true')
+    .then(res => {
+      if (res.data) {
+        setCachedData('categories', res.data);
+      }
+      return res.data;
+    })
+    .catch(error => {
+      console.warn('Failed to fetch categories from server', error);
+      return cached;
+    });
+
+  // If cached, return immediately for instant UI render
+  if (cached && Array.isArray(cached) && cached.length > 0) {
+    return cached;
   }
+
+  return await fetchPromise;
+};
+
+// Test Series (with instant cache + background revalidate)
+export const getTestSeries = async () => {
+  const cached = await getCachedData<any[]>('test_series');
+  
+  // Background fetch
+  const fetchPromise = apiClient.get('/test-series')
+    .then(res => {
+      if (res.data) {
+        setCachedData('test_series', res.data);
+      }
+      return res.data;
+    })
+    .catch(error => {
+      console.warn('Failed to fetch test series from server', error);
+      return cached;
+    });
+
+  if (cached && Array.isArray(cached) && cached.length > 0) {
+    return cached;
+  }
+
+  return await fetchPromise;
 };
 
 // Single Test with Questions
 export const getTestDetails = async (testId: string) => {
+  const cached = await getCachedData<any>(`test_${testId}`);
   try {
     const res = await apiClient.get(`/tests/${testId}`);
+    if (res.data) {
+      setCachedData(`test_${testId}`, res.data);
+    }
     return res.data;
   } catch (error) {
-    console.warn(`Failed to fetch test ${testId} from server, using fallback`, error);
+    if (cached) return cached;
+    console.warn(`Failed to fetch test ${testId} from server`, error);
     return null;
   }
 };
@@ -109,6 +190,26 @@ export const getMyProfile = async () => {
 };
 
 // Submit Test Attempt
+export const startAttempt = async (testId: string) => {
+  try {
+    const res = await apiClient.post('/attempts/start', { testId });
+    return res.data;
+  } catch (error) {
+    console.warn('Failed to start attempt on server', error);
+    return null;
+  }
+};
+
+export const syncAttempt = async (attemptId: string, savedState: any) => {
+  try {
+    const res = await apiClient.patch(`/attempts/sync/${attemptId}`, savedState);
+    return res.data;
+  } catch (error) {
+    console.warn('Failed to sync attempt on server', error);
+    return null;
+  }
+};
+
 export const submitAttempt = async (data: {
   testId: string;
   answers: { questionId: string; selectedOption: string }[];

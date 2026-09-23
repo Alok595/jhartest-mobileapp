@@ -4,15 +4,15 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Image,
   StyleSheet,
   Dimensions,
   StatusBar,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { apiClient } from '../../services/api';
+import { apiClient, getCachedData, setCachedData } from '../../services/api';
 import {
   Bell,
   Menu,
@@ -76,12 +76,27 @@ export default function HomeScreen() {
   const [quickActions, setQuickActions] = useState<any[]>(QUICK_ACTIONS_FALLBACK);
 
   React.useEffect(() => {
+    // Instant cache load
+    getCachedData<any[]>('home_banners').then(cached => {
+      if (cached && cached.length > 0) setBanners(cached);
+    });
+    getCachedData<any[]>('home_quick_actions').then(cached => {
+      if (cached && cached.length > 0) setQuickActions(cached);
+    });
+
+    // Background fresh fetch
     apiClient.get('/banners').then(res => {
-      if (res.data && res.data.length > 0) setBanners(res.data);
+      if (res.data && res.data.length > 0) {
+        setBanners(res.data);
+        setCachedData('home_banners', res.data);
+      }
     }).catch(() => console.log('Using fallback banners'));
 
     apiClient.get('/quick-actions').then(res => {
-      if (res.data && res.data.length > 0) setQuickActions(res.data);
+      if (res.data && res.data.length > 0) {
+        setQuickActions(res.data);
+        setCachedData('home_quick_actions', res.data);
+      }
     }).catch(() => console.log('Using fallback quick actions'));
   }, []);
 
@@ -117,7 +132,7 @@ export default function HomeScreen() {
             <Image
               source={require('../../../assets/images/test5.jpeg')}
               style={styles.headerFullLogo}
-              resizeMode="contain"
+              contentFit="contain"
             />
           </View>
         </View>
@@ -153,7 +168,7 @@ export default function HomeScreen() {
               <Image 
                 source={{ uri: banner.imageUrl || banner.image }} 
                 style={styles.bannerImage} 
-                resizeMode="cover"
+                contentFit="cover"
               />
               {banner.buttonText ? (
                 <View style={styles.bannerButtonContainer}>

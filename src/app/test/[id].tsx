@@ -9,8 +9,8 @@ import {
   ActivityIndicator,
   Modal,
   Dimensions,
-  Image,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -36,51 +36,12 @@ import {
   ZoomIn,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import { submitAttempt, getApiBaseUrl, fetchUserAttempts } from '../../services/api';
+import { submitAttempt, getApiBaseUrl, fetchUserAttempts, startAttempt, syncAttempt } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 
-const SEED_QUESTIONS = [
-  {
-    id: 'q-jh-1',
-    sectionName: 'General',
-    textEn: "In which district is the 'Betla National Park' located in Jharkhand?",
-    textHi: "झारखंड में 'बेतला राष्ट्रीय उद्यान' किस जिले में स्थित है?",
-    optionsEn: ['Latehar', 'Palamu', 'Gumla', 'Lohardaga'],
-    optionsHi: ['लातेहार', 'पलामू', 'गुमला', 'लोहरदगा'],
-    correctAnswer: 0, // A
-    marks: 1,
-    negativeMark: 0.25,
-    explanationEn: "Betla National Park located in Latehar district was one of the first national parks in India to conduct a tiger census in 1932.",
-    explanationHi: "बेतला राष्ट्रीय उद्यान लातेहार जिले में स्थित है और यह 1932 में बाघ गणना कराने वाले भारत के पहले राष्ट्रीय उद्यानों में से एक था।",
-  },
-  {
-    id: 'q-jh-2',
-    sectionName: 'General',
-    textEn: 'In which year was the state of Jharkhand carved out of Bihar?',
-    textHi: 'झारखंड राज्य का गठन बिहार से अलग होकर किस वर्ष हुआ था?',
-    optionsEn: ['15 November 1999', '15 November 2000', '15 August 2000', '26 January 2001'],
-    optionsHi: ['15 नवम्बर 1999', '15 नवम्बर 2000', '15 अगस्त 2000', '26 जनवरी 2001'],
-    correctAnswer: 1, // B
-    marks: 1,
-    negativeMark: 0.25,
-    explanationEn: 'Jharkhand became the 28th state of India on 15 November 2000, commemorating the birth anniversary of tribal icon Birsa Munda.',
-    explanationHi: 'भगवान बिरसा मुंडा की जयंती के अवसर पर 15 नवम्बर 2000 को झारखंड भारत का 28वां राज्य बना।',
-  },
-  {
-    id: 'q-jh-3',
-    sectionName: 'General',
-    textEn: 'Who is revered as "Dharti Aaba" (Father of the Earth) in Jharkhand?',
-    textHi: 'झारखंड में किन्हें "धरती आबा" (विश्व पिता) के नाम से जाना जाता है?',
-    optionsEn: ['Sidhu Murmu', 'Jatra Bhagat', 'Birsa Munda', 'Tilka Manjhi'],
-    optionsHi: ['सिद्धू मुर्मू', 'जतरा भगत', 'बिरसा मुंडा', 'तिलका मांझी'],
-    correctAnswer: 2, // C
-    marks: 1,
-    negativeMark: 0.25,
-    explanationEn: 'Bhagwan Birsa Munda is revered as Dharti Aaba for leading the historic Ulgulan revolt.',
-    explanationHi: 'भगवान बिरसा मुंडा को उनके महान उलगुलान आंदोलन के लिए धरती आबा कहा जाता है।',
-  },
-];
+import { SEED_QUESTIONS } from '../../constants/seedData';
+
 
 export default function MobileTestAttemptScreen() {
   const { id } = useLocalSearchParams();
@@ -91,6 +52,7 @@ export default function MobileTestAttemptScreen() {
   const [questions, setQuestions] = useState<any[]>(SEED_QUESTIONS);
   const [loading, setLoading] = useState(true);
   const [currentQ, setCurrentQ] = useState(0);
+  const [attemptId, setAttemptId] = useState<string | null>(null);
 
   // User responses
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -159,6 +121,21 @@ export default function MobileTestAttemptScreen() {
     const fetchTestData = async () => {
       try {
         setLoading(true);
+        // Initialize Attempt
+        let savedState: any = null;
+        if (id) {
+          const attempt = await startAttempt(id as string);
+          if (attempt && attempt.id) {
+            setAttemptId(attempt.id);
+            if (attempt.savedState) {
+               savedState = attempt.savedState;
+               if (savedState.answers) setAnswers(savedState.answers);
+               if (savedState.timeLeft) setTimeLeft(savedState.timeLeft);
+               if (savedState.currentQ) setCurrentQ(savedState.currentQ);
+            }
+          }
+        }
+
         // 1. Fetch Test Meta
         const tRes = await fetch(`${getApiBaseUrl()}/tests/${id}`);
         if (tRes.ok) {
@@ -300,6 +277,20 @@ export default function MobileTestAttemptScreen() {
     const s = seconds % 60;
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
+
+  // Autosync state
+  useEffect(() => {
+    if (attemptId && !submitting && viewMode === 'exam') {
+      const timeout = setTimeout(() => {
+        syncAttempt(attemptId, {
+          answers,
+          timeLeft,
+          currentQ
+        });
+      }, 1000);
+      return () => clearTimeout(timeout);
+    }
+  }, [answers, currentQ]);
 
   // Group sections
   const sections = useMemo(() => {
@@ -1102,7 +1093,7 @@ function extractLanguageText(rawText: string | undefined | null, lang: 'EN' | 'H
                         onPress={() => setPreviewImageUrl(q.questionImageUrl)} 
                         style={styles.imageCard}
                       >
-                        <Image source={{ uri: q.questionImageUrl }} style={styles.qImage} resizeMode="contain" />
+                        <Image source={{ uri: q.questionImageUrl }} style={styles.qImage} contentFit="contain" />
                         <View style={styles.tapToZoomBadge}>
                           <ZoomIn size={10} color="#475569" />
                           <Text style={styles.tapToZoomText}>Tap to zoom</Text>
@@ -1171,22 +1162,22 @@ function extractLanguageText(rawText: string | undefined | null, lang: 'EN' | 'H
                                 <Text style={optTextStyle}>{optText}</Text>
                                 {optIdx === 0 && Boolean(q.optAImageUrl && q.optAImageUrl.trim()) && (
                                   <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImageUrl(q.optAImageUrl)} style={styles.optImageCard}>
-                                    <Image source={{ uri: q.optAImageUrl }} style={styles.optImage} resizeMode="contain" />
+                                    <Image source={{ uri: q.optAImageUrl }} style={styles.optImage} contentFit="contain" />
                                   </TouchableOpacity>
                                 )}
                                 {optIdx === 1 && Boolean(q.optBImageUrl && q.optBImageUrl.trim()) && (
                                   <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImageUrl(q.optBImageUrl)} style={styles.optImageCard}>
-                                    <Image source={{ uri: q.optBImageUrl }} style={styles.optImage} resizeMode="contain" />
+                                    <Image source={{ uri: q.optBImageUrl }} style={styles.optImage} contentFit="contain" />
                                   </TouchableOpacity>
                                 )}
                                 {optIdx === 2 && Boolean(q.optCImageUrl && q.optCImageUrl.trim()) && (
                                   <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImageUrl(q.optCImageUrl)} style={styles.optImageCard}>
-                                    <Image source={{ uri: q.optCImageUrl }} style={styles.optImage} resizeMode="contain" />
+                                    <Image source={{ uri: q.optCImageUrl }} style={styles.optImage} contentFit="contain" />
                                   </TouchableOpacity>
                                 )}
                                 {optIdx === 3 && Boolean(q.optDImageUrl && q.optDImageUrl.trim()) && (
                                   <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImageUrl(q.optDImageUrl)} style={styles.optImageCard}>
-                                    <Image source={{ uri: q.optDImageUrl }} style={styles.optImage} resizeMode="contain" />
+                                    <Image source={{ uri: q.optDImageUrl }} style={styles.optImage} contentFit="contain" />
                                   </TouchableOpacity>
                                 )}
                               </View>
@@ -1216,7 +1207,7 @@ function extractLanguageText(rawText: string | undefined | null, lang: 'EN' | 'H
                           {!!qExplanation && <Text style={styles.explanationBodyText}>{qExplanation}</Text>}
                           {Boolean(q.explanationImageUrl && q.explanationImageUrl.trim()) && (
                             <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImageUrl(q.explanationImageUrl)} style={styles.imageCard}>
-                              <Image source={{ uri: q.explanationImageUrl }} style={styles.expImage} resizeMode="contain" />
+                              <Image source={{ uri: q.explanationImageUrl }} style={styles.expImage} contentFit="contain" />
                               <View style={styles.tapToZoomBadge}>
                                 <ZoomIn size={10} color="#475569" />
                                 <Text style={styles.tapToZoomText}>Tap to zoom</Text>
@@ -1340,7 +1331,7 @@ function extractLanguageText(rawText: string | undefined | null, lang: 'EN' | 'H
               <Image 
                 source={{ uri: previewImageUrl }} 
                 style={styles.fullPreviewImage} 
-                resizeMode="contain" 
+                contentFit="contain" 
               />
             )}
           </View>
@@ -1445,7 +1436,7 @@ function extractLanguageText(rawText: string | undefined | null, lang: 'EN' | 'H
               onPress={() => setPreviewImageUrl(question.questionImageUrl)} 
               style={styles.imageCard}
             >
-              <Image source={{ uri: question.questionImageUrl }} style={styles.qImage} resizeMode="contain" />
+              <Image source={{ uri: question.questionImageUrl }} style={styles.qImage} contentFit="contain" />
               <View style={styles.tapToZoomBadge}>
                 <ZoomIn size={10} color="#475569" />
                 <Text style={styles.tapToZoomText}>Tap to zoom</Text>
@@ -1488,22 +1479,22 @@ function extractLanguageText(rawText: string | undefined | null, lang: 'EN' | 'H
                       </Text>
                       {idx === 0 && Boolean(question.optAImageUrl && question.optAImageUrl.trim()) && (
                         <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImageUrl(question.optAImageUrl)} style={styles.optImageCard}>
-                          <Image source={{ uri: question.optAImageUrl }} style={styles.optImage} resizeMode="contain" />
+                          <Image source={{ uri: question.optAImageUrl }} style={styles.optImage} contentFit="contain" />
                         </TouchableOpacity>
                       )}
                       {idx === 1 && Boolean(question.optBImageUrl && question.optBImageUrl.trim()) && (
                         <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImageUrl(question.optBImageUrl)} style={styles.optImageCard}>
-                          <Image source={{ uri: question.optBImageUrl }} style={styles.optImage} resizeMode="contain" />
+                          <Image source={{ uri: question.optBImageUrl }} style={styles.optImage} contentFit="contain" />
                         </TouchableOpacity>
                       )}
                       {idx === 2 && Boolean(question.optCImageUrl && question.optCImageUrl.trim()) && (
                         <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImageUrl(question.optCImageUrl)} style={styles.optImageCard}>
-                          <Image source={{ uri: question.optCImageUrl }} style={styles.optImage} resizeMode="contain" />
+                          <Image source={{ uri: question.optCImageUrl }} style={styles.optImage} contentFit="contain" />
                         </TouchableOpacity>
                       )}
                       {idx === 3 && Boolean(question.optDImageUrl && question.optDImageUrl.trim()) && (
                         <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImageUrl(question.optDImageUrl)} style={styles.optImageCard}>
-                          <Image source={{ uri: question.optDImageUrl }} style={styles.optImage} resizeMode="contain" />
+                          <Image source={{ uri: question.optDImageUrl }} style={styles.optImage} contentFit="contain" />
                         </TouchableOpacity>
                       )}
                     </View>
@@ -1809,7 +1800,7 @@ function extractLanguageText(rawText: string | undefined | null, lang: 'EN' | 'H
             <Image 
               source={{ uri: previewImageUrl }} 
               style={styles.fullPreviewImage} 
-              resizeMode="contain" 
+              contentFit="contain" 
             />
           )}
         </View>

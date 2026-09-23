@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Linking, Alert, TextInput, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking, Alert, TextInput, Platform } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
@@ -656,13 +657,13 @@ export default function FolderExploreScreen() {
                   <Image 
                     source={{ uri: activeQrUrl }} 
                     style={styles.qrImage}
-                    resizeMode="contain" 
+                    contentFit="contain" 
                   />
                 ) : (
                   <Image 
                     source={require('../../../../assets/images/qr_code.png')} 
                     style={styles.qrImage}
-                    resizeMode="contain" 
+                    contentFit="contain" 
                   />
                 )}
                 <View style={styles.qrFooterBadge}>
@@ -1157,7 +1158,7 @@ const styles = StyleSheet.create({
   thumbnailImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'contain',
+    contentFit: 'contain',
   },
   thumbnailPlaceholder: {
     flex: 1,
