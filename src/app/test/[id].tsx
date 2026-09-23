@@ -193,19 +193,19 @@ export default function MobileTestAttemptScreen() {
             fetch(`${getApiBaseUrl()}/settings/exam`).catch(() => null)
           ]);
 
-          let globalSettingMax = 3;
+          let globalSettingMax = 2;
           if (setRes && setRes.ok) {
             const setJson = await setRes.json();
-            if (setJson?.data?.maxAttempts) {
+            if (setJson?.data?.maxAttempts !== undefined) {
               globalSettingMax = Number(setJson.data.maxAttempts);
             }
           }
 
           if (Array.isArray(userAtts)) {
             const matching = userAtts.filter((a: any) => a.testId === id || a.test?.id === id);
-            const maxAtt = testInfo?.maxAttempts || globalSettingMax || 3;
+            const maxAtt = testInfo?.maxAttempts !== undefined ? testInfo.maxAttempts : globalSettingMax;
             const attNum = matching.length + 1;
-            const rem = Math.max(0, maxAtt - matching.length);
+            const rem = maxAtt > 0 ? Math.max(0, maxAtt - matching.length) : 999;
 
             setAttemptInfo({
               attemptNumber: attNum,
@@ -213,7 +213,7 @@ export default function MobileTestAttemptScreen() {
               remainingAttempts: rem,
             });
 
-            if (matching.length >= maxAtt) {
+            if (maxAtt > 0 && matching.length >= maxAtt) {
               const latest = matching[0];
               Alert.alert(
                 'Attempts Limit Reached',
@@ -414,10 +414,12 @@ export default function MobileTestAttemptScreen() {
         }
 
         if (attemptRes.attemptNumber !== undefined) {
+          const resMax = attemptRes.maxAttempts !== undefined ? attemptRes.maxAttempts : 2;
+          const resRem = attemptRes.remainingAttempts !== undefined ? attemptRes.remainingAttempts : (resMax > 0 ? Math.max(0, resMax - (attemptRes.attemptNumber || 1)) : 999);
           setAttemptInfo({
             attemptNumber: attemptRes.attemptNumber || 1,
-            maxAttempts: attemptRes.maxAttempts || 2,
-            remainingAttempts: attemptRes.remainingAttempts !== undefined ? attemptRes.remainingAttempts : Math.max(0, (attemptRes.maxAttempts || 2) - (attemptRes.attemptNumber || 1)),
+            maxAttempts: resMax,
+            remainingAttempts: resRem,
           });
         }
       }

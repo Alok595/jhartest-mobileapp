@@ -33,10 +33,10 @@ export default function SeriesDetailScreen() {
           setSeries(item);
         }
 
-        let currentGlobalMax = 3;
+        let currentGlobalMax = 2;
         if (setRes && setRes.ok) {
           const setJson = await setRes.json();
-          if (setJson?.data?.maxAttempts) {
+          if (setJson?.data?.maxAttempts !== undefined) {
             currentGlobalMax = Number(setJson.data.maxAttempts);
             setGlobalMaxAttempts(currentGlobalMax);
           }
@@ -44,7 +44,7 @@ export default function SeriesDetailScreen() {
 
         if (tRes && tRes.ok) {
           const tList = await tRes.json();
-          setTests(Array.isArray(tList) ? tList.map(t => ({ ...t, maxAttempts: t.maxAttempts || currentGlobalMax })) : []);
+          setTests(Array.isArray(tList) ? tList.map(t => ({ ...t, maxAttempts: t.maxAttempts !== undefined ? t.maxAttempts : currentGlobalMax })) : []);
         }
 
         if (Array.isArray(userAttData)) {
@@ -90,9 +90,9 @@ export default function SeriesDetailScreen() {
   const handleStartTest = (testId: string) => {
     const test = tests.find((t) => t.id === testId);
     const matchingAttempts = userAttempts.filter((a: any) => a.testId === testId || a.test?.id === testId);
-    const maxAttempts = test?.maxAttempts || 2;
+    const maxAttempts = test?.maxAttempts !== undefined ? test.maxAttempts : globalMaxAttempts;
 
-    if (matchingAttempts.length >= maxAttempts) {
+    if (maxAttempts > 0 && matchingAttempts.length >= maxAttempts) {
       const latestAttempt = matchingAttempts[0];
       Alert.alert(
         'Attempts Exhausted',
@@ -142,8 +142,8 @@ export default function SeriesDetailScreen() {
               {tests.map((test, index) => {
                 const testAttempts = userAttempts.filter((a: any) => a.testId === test.id || a.test?.id === test.id);
                 const attemptCount = testAttempts.length;
-                const maxAttempts = test.maxAttempts || 2;
-                const isExhausted = attemptCount >= maxAttempts;
+                const maxAttempts = test.maxAttempts !== undefined ? test.maxAttempts : globalMaxAttempts;
+                const isExhausted = maxAttempts > 0 && attemptCount >= maxAttempts;
                 const latestAttemptId = testAttempts[0]?.id;
 
                 return (
@@ -168,11 +168,15 @@ export default function SeriesDetailScreen() {
                       ) : attemptCount > 0 ? (
                         <View style={[styles.testBadge, styles.testBadgePartial]}>
                           <RotateCcw size={11} color="#0072FF" />
-                          <Text style={styles.testBadgeTextPartial}>Attempt {attemptCount}/{maxAttempts} Done</Text>
+                          <Text style={styles.testBadgeTextPartial}>
+                            {maxAttempts === 0 ? `Attempt ${attemptCount} Done (Unlimited)` : `Attempt ${attemptCount}/${maxAttempts} Done`}
+                          </Text>
                         </View>
                       ) : (
                         <View style={styles.testBadge}>
-                          <Text style={styles.testBadgeText}>PAPER {test.testNumber || index + 1} • {maxAttempts} Attempts</Text>
+                          <Text style={styles.testBadgeText}>
+                            PAPER {test.testNumber || index + 1} • {maxAttempts === 0 ? 'Unlimited Attempts' : `${maxAttempts} Attempts`}
+                          </Text>
                         </View>
                       )}
 
@@ -214,7 +218,9 @@ export default function SeriesDetailScreen() {
                             style={styles.startBtnPill}
                             onPress={() => handleStartTest(test.id)}
                           >
-                            <Text style={styles.startBtnPillText}>Re-Attempt ({maxAttempts - attemptCount} left)</Text>
+                            <Text style={styles.startBtnPillText}>
+                              {maxAttempts === 0 ? 'Re-Attempt (Unlimited)' : `Re-Attempt (${maxAttempts - attemptCount} left)`}
+                            </Text>
                             <PlayCircle size={14} color="#0072FF" />
                           </TouchableOpacity>
                         </View>
@@ -330,8 +336,8 @@ export default function SeriesDetailScreen() {
       {tests.length > 0 && (() => {
         const firstTestAttempts = userAttempts.filter((a: any) => a.testId === tests[0].id || a.test?.id === tests[0].id);
         const firstAttemptCount = firstTestAttempts.length;
-        const firstMaxAttempts = tests[0].maxAttempts || 2;
-        const firstExhausted = firstAttemptCount >= firstMaxAttempts;
+        const firstMaxAttempts = tests[0].maxAttempts !== undefined ? tests[0].maxAttempts : globalMaxAttempts;
+        const firstExhausted = firstMaxAttempts > 0 && firstAttemptCount >= firstMaxAttempts;
         const firstLatestAttemptId = firstTestAttempts[0]?.id;
 
         if (firstExhausted) {
