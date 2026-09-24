@@ -120,10 +120,12 @@ export default function SeriesDetailScreen() {
   const handleStartTest = (testId: string) => {
     const test = tests.find((t) => t.id === testId);
     const matchingAttempts = userAttempts.filter((a: any) => a.testId === testId || a.test?.id === testId);
+    const completedAttempts = matchingAttempts.filter((a: any) => a.status === 'SUBMITTED');
     const maxAttempts = test?.maxAttempts !== undefined ? test.maxAttempts : globalMaxAttempts;
 
-    if (maxAttempts > 0 && matchingAttempts.length >= maxAttempts) {
-      const latestAttempt = matchingAttempts[0];
+    if (maxAttempts > 0 && completedAttempts.length >= maxAttempts) {
+      const latestCompletedAttemptId = completedAttempts.length > 0 ? completedAttempts[0].id : null;
+      
       Alert.alert(
         'Attempts Exhausted',
         `You have already completed all ${maxAttempts}/${maxAttempts} allowed attempts for this test. You can view your scorecard and full solutions.`,
@@ -131,7 +133,7 @@ export default function SeriesDetailScreen() {
           {
             text: 'View Result & Solutions',
             onPress: () => {
-              if (latestAttempt?.id) router.push(`/result/${latestAttempt.id}`);
+              if (latestCompletedAttemptId) router.push(`/test/${testId}?viewMode=review&attemptId=${latestCompletedAttemptId}`);
             },
           },
           { text: 'Cancel', style: 'cancel' },
@@ -171,10 +173,12 @@ export default function SeriesDetailScreen() {
             <View style={styles.testList}>
               {tests.map((test, index) => {
                 const testAttempts = userAttempts.filter((a: any) => a.testId === test.id || a.test?.id === test.id);
-                const attemptCount = testAttempts.length;
+                const completedAttempts = testAttempts.filter((a: any) => a.status === 'SUBMITTED');
+                const attemptCount = completedAttempts.length;
                 const maxAttempts = test.maxAttempts !== undefined ? test.maxAttempts : globalMaxAttempts;
                 const isExhausted = maxAttempts > 0 && attemptCount >= maxAttempts;
-                const latestAttemptId = testAttempts[0]?.id;
+                
+                const latestCompletedAttemptId = completedAttempts.length > 0 ? completedAttempts[0].id : null;
 
                 return (
                   <TouchableOpacity
@@ -182,8 +186,8 @@ export default function SeriesDetailScreen() {
                     style={[styles.testCard, isExhausted && styles.testCardExhausted]}
                     activeOpacity={0.8}
                     onPress={() => {
-                      if (isExhausted && latestAttemptId) {
-                        router.push(`/result/${latestAttemptId}`);
+                      if (isExhausted && latestCompletedAttemptId) {
+                        router.push(`/test/${test.id}?viewMode=review&attemptId=${latestCompletedAttemptId}`);
                       } else {
                         handleStartTest(test.id);
                       }
@@ -228,7 +232,7 @@ export default function SeriesDetailScreen() {
                         <TouchableOpacity
                           style={styles.viewResultBtnPill}
                           onPress={() => {
-                            if (latestAttemptId) router.push(`/result/${latestAttemptId}`);
+                            if (latestCompletedAttemptId) router.push(`/test/${test.id}?viewMode=review&attemptId=${latestCompletedAttemptId}`);
                           }}
                         >
                           <Text style={styles.viewResultBtnPillText}>View Result & Solutions</Text>
@@ -236,9 +240,9 @@ export default function SeriesDetailScreen() {
                         </TouchableOpacity>
                       ) : attemptCount > 0 ? (
                         <View style={styles.attemptActionGroup}>
-                          {latestAttemptId && (
+                          {latestCompletedAttemptId && (
                             <TouchableOpacity
-                              onPress={() => router.push(`/result/${latestAttemptId}`)}
+                              onPress={() => router.push(`/test/${test.id}?viewMode=review&attemptId=${latestCompletedAttemptId}`)}
                               style={styles.prevResultLink}
                             >
                               <Text style={styles.prevResultLinkText}>Last Result</Text>
@@ -365,10 +369,11 @@ export default function SeriesDetailScreen() {
       {/* Sticky Bottom Action */}
       {tests.length > 0 && (() => {
         const firstTestAttempts = userAttempts.filter((a: any) => a.testId === tests[0].id || a.test?.id === tests[0].id);
-        const firstAttemptCount = firstTestAttempts.length;
+        const firstCompletedAttempts = firstTestAttempts.filter((a: any) => a.status === 'SUBMITTED');
+        const firstAttemptCount = firstCompletedAttempts.length;
         const firstMaxAttempts = tests[0].maxAttempts !== undefined ? tests[0].maxAttempts : globalMaxAttempts;
         const firstExhausted = firstMaxAttempts > 0 && firstAttemptCount >= firstMaxAttempts;
-        const firstLatestAttemptId = firstTestAttempts[0]?.id;
+        const firstLatestCompletedAttemptId = firstCompletedAttempts[0]?.id;
 
         if (firstExhausted) {
           return (
@@ -377,8 +382,8 @@ export default function SeriesDetailScreen() {
                 style={styles.startButton}
                 activeOpacity={0.85}
                 onPress={() => {
-                  if (firstLatestAttemptId) {
-                    router.push(`/result/${firstLatestAttemptId}`);
+                  if (firstLatestCompletedAttemptId) {
+                    router.push(`/test/${tests[0].id}?viewMode=review&attemptId=${firstLatestCompletedAttemptId}`);
                   } else {
                     Alert.alert('Attempts Completed', 'You have completed all attempts for this test.');
                   }

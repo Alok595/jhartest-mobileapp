@@ -62,7 +62,8 @@ export default function FolderExploreScreen() {
 
   const fetchFolder = async () => {
     try {
-      const res = await fetch(`${getApiBaseUrl()}/folders/${id}`);
+      const qs = user?.id ? `?userId=${user.id}` : '';
+      const res = await fetch(`${getApiBaseUrl()}/folders/${id}${qs}`);
       const data = await res.json();
       setFolder(data);
       setCachedData(`folder_${id}`, data);
@@ -1098,23 +1099,49 @@ export default function FolderExploreScreen() {
                   </Text>
 
                   <View style={{ marginTop: 'auto', flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 6 }}>
-                    <View style={{ 
-                      backgroundColor: '#EFF6FF', 
-                      paddingHorizontal: 12, 
-                      paddingVertical: 5, 
-                      borderRadius: 8,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                    }}>
-                      <Text style={{ 
-                        color: '#0072FF', 
-                        fontSize: 11, 
-                        fontWeight: '700' 
+                    {ts.userAttemptsCount >= (ts.maxAttempts || 2) ? (
+                      <TouchableOpacity 
+                        onPress={(e) => { 
+                          e.stopPropagation(); 
+                          if (ts.firstTestId && ts.latestAttemptId) {
+                            router.push(`/test/${ts.firstTestId}?viewMode=review&attemptId=${ts.latestAttemptId}`);
+                          }
+                        }}
+                        style={{ 
+                          backgroundColor: '#D1FAE5', 
+                          paddingHorizontal: 12, 
+                          paddingVertical: 5, 
+                          borderRadius: 8,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Text style={{ color: '#059669', fontSize: 11, fontWeight: '700', marginRight: 4 }}>
+                          Attempt Completed
+                        </Text>
+                        <CheckCircle2 size={14} color="#059669" />
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={{ 
+                        backgroundColor: '#EFF6FF', 
+                        paddingHorizontal: 12, 
+                        paddingVertical: 5, 
+                        borderRadius: 8,
+                        flexDirection: 'row',
+                        alignItems: 'center',
                       }}>
-                        Start Test Series
-                      </Text>
-                      <ChevronRight size={14} color="#0072FF" />
-                    </View>
+                        <Text style={{ 
+                          color: '#0072FF', 
+                          fontSize: 11, 
+                          fontWeight: '700' 
+                        }}>
+                          {ts.userAttemptsCount > 0 
+                            ? `Re-Attempt (${(ts.maxAttempts || 2) - ts.userAttemptsCount} left)` 
+                            : `Attempt Test 1/${ts.maxAttempts || 2}`}
+                        </Text>
+                        <ChevronRight size={14} color="#0072FF" style={{ marginLeft: 4 }} />
+                      </View>
+                    )}
                   </View>
                 </View>
               </TouchableOpacity>

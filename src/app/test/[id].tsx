@@ -138,7 +138,22 @@ export default function MobileTestAttemptScreen() {
           const attemptRes = await fetchAttemptDetails(reviewAttemptId as string);
           if (attemptRes) {
             setAttemptId(attemptRes.id);
-            if (attemptRes.answers) setAnswers(attemptRes.answers);
+            if (attemptRes.answers) {
+              const parsedAnswers: Record<string, number> = {};
+              for (const [qId, val] of Object.entries(attemptRes.answers)) {
+                if (typeof val === 'string') {
+                  const upper = val.toUpperCase();
+                  if (upper === 'A') parsedAnswers[qId] = 0;
+                  else if (upper === 'B') parsedAnswers[qId] = 1;
+                  else if (upper === 'C') parsedAnswers[qId] = 2;
+                  else if (upper === 'D') parsedAnswers[qId] = 3;
+                  else parsedAnswers[qId] = Number(val) || 0;
+                } else if (typeof val === 'number') {
+                  parsedAnswers[qId] = val;
+                }
+              }
+              setAnswers(parsedAnswers);
+            }
             
             const result = {
               score: Number(attemptRes.score || 0),
@@ -230,10 +245,10 @@ export default function MobileTestAttemptScreen() {
           }
 
           if (Array.isArray(userAtts)) {
-            const matching = userAtts.filter((a: any) => a.testId === id || a.test?.id === id);
+            const completedAttempts = userAtts.filter((a: any) => (a.testId === id || a.test?.id === id) && a.status === 'SUBMITTED');
             const maxAtt = testInfo?.maxAttempts !== undefined ? testInfo.maxAttempts : globalSettingMax;
-            const attNum = matching.length + 1;
-            const rem = maxAtt > 0 ? Math.max(0, maxAtt - matching.length) : 999;
+            const attNum = completedAttempts.length + 1;
+            const rem = maxAtt > 0 ? Math.max(0, maxAtt - completedAttempts.length) : 999;
 
             setAttemptInfo({
               attemptNumber: attNum,
@@ -241,8 +256,8 @@ export default function MobileTestAttemptScreen() {
               remainingAttempts: rem,
             });
 
-            if (maxAtt > 0 && matching.length >= maxAtt) {
-              const latest = matching[0];
+            if (initialViewMode !== 'review' && maxAtt > 0 && completedAttempts.length >= maxAtt) {
+              const latest = completedAttempts[0];
               Alert.alert(
                 'Attempts Limit Reached',
                 `You have completed your allowed ${maxAtt}/${maxAtt} attempts for this test. You can now review your solutions and result breakdown.`,
@@ -251,7 +266,7 @@ export default function MobileTestAttemptScreen() {
                     text: 'View Solutions',
                     onPress: () => {
                       if (latest?.id) {
-                        router.replace(`/result/${latest.id}`);
+                        router.replace(`/test/${id}?viewMode=review&attemptId=${latest.id}`);
                       } else {
                         setViewMode('review');
                       }
@@ -2719,7 +2734,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   scoreLabelSmall: {
-    color: '#94A3B8',
+    color: '#E0F2FE',
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
@@ -2730,17 +2745,17 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   scoreValueBig: {
-    color: '#38BDF8',
+    color: '#FFFFFF',
     fontSize: 28,
     fontWeight: '900',
   },
   scoreValueMax: {
-    color: '#94A3B8',
+    color: '#BAE6FD',
     fontSize: 14,
     fontWeight: '700',
   },
   scorePercentageText: {
-    color: '#34D399',
+    color: '#6EE7B7',
     fontSize: 11,
     fontWeight: '700',
     marginTop: 4,
@@ -2760,7 +2775,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   rankItemLabel: {
-    color: '#94A3B8',
+    color: '#E0F2FE',
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.5,
@@ -2771,7 +2786,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   rankItemTotal: {
-    color: '#94A3B8',
+    color: '#BAE6FD',
     fontSize: 10,
     fontWeight: '600',
   },
@@ -2794,7 +2809,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   heroSecLabel: {
-    color: '#94A3B8',
+    color: '#E0F2FE',
     fontSize: 10,
     fontWeight: '600',
   },
