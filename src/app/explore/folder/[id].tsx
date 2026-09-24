@@ -180,7 +180,7 @@ export default function FolderExploreScreen() {
 
   const openWhatsAppHelp = () => {
     const finalPrice = folder?.discountPrice || folder?.price || 0;
-    const message = `Hello Jharkhand Warrior, I need help with purchasing "${folder?.name || 'Package'}" (Price: ₹${finalPrice}).`;
+    const message = `Hello JharTest, I need help with purchasing "${folder?.name || 'Package'}" (Price: ₹${finalPrice}).`;
     const whatsappUrl = `whatsapp://send?phone=917903466871&text=${encodeURIComponent(message)}`;
     Linking.openURL(whatsappUrl).catch(() => {
       Alert.alert('Notice', 'Could not open WhatsApp. Please contact 7903466871 manually.');
@@ -189,7 +189,7 @@ export default function FolderExploreScreen() {
 
   const openWhatsAppSupport = () => {
     const utr = orderData?.transactionId || transactionId || '';
-    const message = `Hello Jharkhand Warrior, I have submitted payment for "${folder?.name || 'Course'}"${utr ? ` (UTR / Txn ID: ${utr})` : ''}. Please verify and activate my access.`;
+    const message = `Hello JharTest, I have submitted payment for "${folder?.name || 'Course'}"${utr ? ` (UTR / Txn ID: ${utr})` : ''}. Please verify and activate my access.`;
     const whatsappUrl = `whatsapp://send?phone=917903466871&text=${encodeURIComponent(message)}`;
     Linking.openURL(whatsappUrl).catch(() => {
       Alert.alert('Notice', 'Could not open WhatsApp. Please contact 7903466871 manually.');
@@ -305,7 +305,7 @@ export default function FolderExploreScreen() {
             { 
               text: 'Send WhatsApp', 
               onPress: async () => {
-                const message = `Hello Jharkhand Warrior, I have submitted a payment request for a premium folder.\n\n📚 Folder: ${folder.name}\n💰 Amount: ₹${finalPrice}\n👤 Name: ${studentName.trim()}\n📱 Phone: ${studentPhone.trim()}\n🔖 UTR / Transaction ID: ${transactionId.trim()}`;
+                const message = `Hello JharTest, I have submitted a payment request for a premium folder.\n\n📚 Folder: ${folder.name}\n💰 Amount: ₹${finalPrice}\n👤 Name: ${studentName.trim()}\n📱 Phone: ${studentPhone.trim()}\n🔖 UTR / Transaction ID: ${transactionId.trim()}`;
                 const whatsappUrl = `whatsapp://send?phone=917903466871&text=${encodeURIComponent(message)}`;
                 try {
                   await Linking.openURL(whatsappUrl);

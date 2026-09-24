@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
@@ -21,7 +21,7 @@ export default function ProfileScreen() {
   const { user, stats, logout } = useAuth();
 
   const handleLogout = () => {
-    Alert.alert('Log Out', 'Are you sure you want to log out of Jharkhand Warrior?', [
+    Alert.alert('Log Out', 'Are you sure you want to log out of JharTest?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Log Out', style: 'destructive', onPress: () => logout() },
     ]);
@@ -116,11 +116,18 @@ export default function ProfileScreen() {
             <ChevronRight size={18} color="#94A3B8" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => Linking.openURL('https://wa.me/917903466871?text=Hello%20JharTest%2C%20I%20need%20help%20regarding%20my%20test%20series')}
+          >
             <View style={[styles.menuIcon, { backgroundColor: '#F0FDF4' }]}>
               <HelpCircle size={18} color="#16A34A" />
             </View>
-            <Text style={styles.menuTitle}>Student Helpline (WhatsApp)</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.menuTitle}>Student Helpline (WhatsApp)</Text>
+              <Text style={styles.menuSubTitle}>+91 79034 66871</Text>
+            </View>
             <ChevronRight size={18} color="#94A3B8" />
           </TouchableOpacity>
 
@@ -161,6 +168,26 @@ export default function ProfileScreen() {
               <ChevronRight size={18} color="#EF4444" />
             </TouchableOpacity>
           ) : null}
+        </View>
+
+        {/* Developer Attribution */}
+        <View style={styles.developerSection}>
+          <Text style={styles.developerLabel}>designed & developed by</Text>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => Linking.openURL('https://genzdevworks.ratnahomes.in')}
+            style={styles.developerBadge}
+          >
+            <Image
+              source={require('../../../assets/images/genzdev-logo.png')}
+              style={styles.developerLogo}
+              resizeMode="contain"
+            />
+            <Text style={styles.developerText}>
+              GenZDev <Text style={styles.developerTextAccent}>Works</Text>
+            </Text>
+            <View style={styles.developerDot} />
+          </TouchableOpacity>
         </View>
 
       </ScrollView>
@@ -309,5 +336,62 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#0F172A',
+  },
+  menuSubTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#16A34A',
+    marginTop: 1,
+  },
+  developerSection: {
+    marginTop: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  developerLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#94A3B8',
+    textTransform: 'lowercase',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  developerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  developerLogo: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF',
+  },
+  developerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  developerTextAccent: {
+    color: '#F97316',
+    fontWeight: '800',
+  },
+  developerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#F97316',
   },
 });
