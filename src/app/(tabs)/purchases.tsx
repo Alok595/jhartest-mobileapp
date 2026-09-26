@@ -29,6 +29,7 @@ import {
   ArrowRight,
   BookOpen,
   LogIn,
+  RotateCw,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { fetchMyOrders } from '../../services/api';
@@ -377,9 +378,19 @@ export default function PurchasesTab() {
                 : `${orders.length} Enrolled Programs`}
             </Text>
           </View>
-          <View style={styles.headerBadge}>
-            <Layers size={14} color="#0072FF" />
-            <Text style={styles.headerBadgeText}>{counts.active} Active</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              style={styles.refreshBtn}
+              activeOpacity={0.7}
+              onPress={onRefresh}
+              disabled={refreshing}
+            >
+              <RotateCw size={16} color="#0072FF" />
+            </TouchableOpacity>
+            <View style={styles.headerBadge}>
+              <Layers size={14} color="#0072FF" />
+              <Text style={styles.headerBadgeText}>{counts.active} Active</Text>
+            </View>
           </View>
         </View>
 
@@ -549,6 +560,15 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontWeight: '500',
     marginTop: 2,
+  },
+  refreshBtn: {
+    padding: 7,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerBadge: {
     flexDirection: 'row',

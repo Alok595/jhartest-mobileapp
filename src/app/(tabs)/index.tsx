@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,9 @@ import {
   Dimensions,
   StatusBar,
   Linking,
+  RefreshControl,
+  Animated,
+  Easing,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { apiClient, getCachedData, setCachedData } from '../../services/api';
 import {
   Bell,
+  RotateCw,
   Menu,
   PlayCircle,
   Calendar,
@@ -75,6 +79,46 @@ export default function HomeScreen() {
   const router = useRouter();
   const [banners, setBanners] = useState<any[]>(BANNERS);
   const [quickActions, setQuickActions] = useState<any[]>(QUICK_ACTIONS_FALLBACK);
+  const [refreshing, setRefreshing] = useState(false);
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  const startSpinAnimation = () => {
+    spinAnim.setValue(0);
+    Animated.timing(spinAnim, {
+      toValue: 1,
+      duration: 800,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const fetchFreshData = async () => {
+    try {
+      const [bannersRes, actionsRes] = await Promise.allSettled([
+        apiClient.get('/banners'),
+        apiClient.get('/quick-actions'),
+      ]);
+
+      if (bannersRes.status === 'fulfilled' && bannersRes.value?.data && bannersRes.value.data.length > 0) {
+        setBanners(bannersRes.value.data);
+        setCachedData('home_banners', bannersRes.value.data);
+      }
+      if (actionsRes.status === 'fulfilled' && actionsRes.value?.data && actionsRes.value.data.length > 0) {
+        const sorted = [...actionsRes.value.data].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+        setQuickActions(sorted);
+        setCachedData('home_quick_actions', sorted);
+      }
+    } catch (e) {
+      console.log('Error fetching fresh home data:', e);
+    }
+  };
+
+  const onRefresh = async () => {
+    startSpinAnimation();
+    setRefreshing(true);
+    await fetchFreshData();
+    setRefreshing(false);
+  };
 
   React.useEffect(() => {
     // Instant cache load
@@ -89,20 +133,7 @@ export default function HomeScreen() {
     });
 
     // Background fresh fetch
-    apiClient.get('/banners').then(res => {
-      if (res.data && res.data.length > 0) {
-        setBanners(res.data);
-        setCachedData('home_banners', res.data);
-      }
-    }).catch(() => console.log('Using fallback banners'));
-
-    apiClient.get('/quick-actions').then(res => {
-      if (res.data && res.data.length > 0) {
-        const sorted = [...res.data].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-        setQuickActions(sorted);
-        setCachedData('home_quick_actions', sorted);
-      }
-    }).catch(() => console.log('Using fallback quick actions'));
+    fetchFreshData();
   }, []);
 
   const renderIcon = (iconName: string, iconColor = '#0072FF') => {
@@ -136,6 +167,11 @@ export default function HomeScreen() {
     }
   };
 
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
@@ -143,7 +179,6 @@ export default function HomeScreen() {
       {/* Top Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-
           <View style={styles.brandContainer}>
             <Image
               source={require('../../../assets/images/test5.jpeg')}
@@ -153,18 +188,39 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.bellButton} activeOpacity={0.7} onPress={() => router.push('/notifications')}>
-          <Bell size={22} color="#1F1A14" />
-          <View style={styles.notificationBadge}>
-            <Text style={styles.notificationBadgeText}>7</Text>
-          </View>
-        </TouchableOpacity>
+        <View style={styles.headerRightActions}>
+          <TouchableOpacity 
+            style={styles.refreshButton} 
+            activeOpacity={0.7} 
+            onPress={onRefresh}
+            disabled={refreshing}
+          >
+            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+              <RotateCw size={19} color="#0072FF" />
+            </Animated.View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.bellButton} activeOpacity={0.7} onPress={() => router.push('/notifications')}>
+            <Bell size={21} color="#1F1A14" />
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationBadgeText}>7</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#0072FF', '#00C853']}
+            tintColor="#0072FF"
+          />
+        }
       >
         {/* Banner Carousel */}
         <ScrollView
@@ -269,6 +325,18 @@ const styles = StyleSheet.create({
   headerFullLogo: {
     height: 46,
     width: 165,
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  refreshButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   bellButton: {
     padding: 8,

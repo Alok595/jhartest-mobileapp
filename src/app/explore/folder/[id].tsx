@@ -222,7 +222,9 @@ export default function FolderExploreScreen() {
                     qrCodesList.find((q: any) => q.isSelected) || 
                     qrCodesList[0];
 
-  const activeUpiId = currentQr?.upiId || paymentSettings?.upiId || '6202585952';
+  const activeUpiId = (currentQr?.upiId !== undefined && currentQr?.upiId !== null) 
+    ? currentQr.upiId.trim() 
+    : (paymentSettings?.upiId || '').trim();
   const activeQrUrl = currentQr?.qrImageUrl || paymentSettings?.qrImageUrl;
 
   const copyToClipboard = async (text: string) => {
@@ -708,30 +710,32 @@ export default function FolderExploreScreen() {
               </View>
             </View>
 
-            {/* UPI ID Pill with Copy */}
-            <View style={styles.upiContainer}>
-              <View style={styles.upiInfo}>
-                <Text style={styles.upiTag}>OFFICIAL UPI ID</Text>
-                <Text style={styles.upiText} selectable={true}>{activeUpiId}</Text>
+            {/* UPI ID Pill with Copy (Only shown if UPI ID is configured) */}
+            {activeUpiId ? (
+              <View style={styles.upiContainer}>
+                <View style={styles.upiInfo}>
+                  <Text style={styles.upiTag}>OFFICIAL UPI ID</Text>
+                  <Text style={styles.upiText} selectable={true}>{activeUpiId}</Text>
+                </View>
+                <TouchableOpacity 
+                  style={[styles.copyBtn, copiedUpi && styles.copyBtnSuccess]} 
+                  onPress={() => copyToClipboard(activeUpiId)}
+                  activeOpacity={0.8}
+                >
+                  {copiedUpi ? (
+                    <>
+                      <Check size={13} color="#FFFFFF" strokeWidth={3} />
+                      <Text style={styles.copyBtnTextSuccess}>Copied</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={13} color="#FFFFFF" />
+                      <Text style={styles.copyBtnText}>Copy</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity 
-                style={[styles.copyBtn, copiedUpi && styles.copyBtnSuccess]} 
-                onPress={() => copyToClipboard(activeUpiId)}
-                activeOpacity={0.8}
-              >
-                {copiedUpi ? (
-                  <>
-                    <Check size={13} color="#FFFFFF" strokeWidth={3} />
-                    <Text style={styles.copyBtnTextSuccess}>Copied</Text>
-                  </>
-                ) : (
-                  <>
-                    <Copy size={13} color="#FFFFFF" />
-                    <Text style={styles.copyBtnText}>Copy</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
+            ) : null}
 
             {/* Dynamic QR Code Image (Clean & Centered) */}
             <View style={styles.qrFrame}>
