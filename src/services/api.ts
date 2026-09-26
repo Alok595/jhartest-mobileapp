@@ -71,7 +71,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes fresh TTL
 export const getCachedData = async <T>(key: string): Promise<T | null> => {
   // 1. Check ultra-fast RAM cache (< 1ms)
   const inMemory = memoryCache.get(key);
-  if (inMemory) {
+  if (inMemory && (Date.now() - inMemory.timestamp) < CACHE_TTL_MS) {
     return inMemory.data as T;
   }
   // 2. Check disk cache
