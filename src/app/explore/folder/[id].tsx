@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking, Alert, TextInput, Platform, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking, Alert, TextInput, Platform, Animated, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,7 +11,8 @@ import {
   ChevronRight, 
   Lock, 
   Copy, 
-  RefreshCw, 
+  RefreshCw,
+  RotateCw, 
   CheckCircle2,
   Sparkles,
   ShieldCheck,
@@ -204,11 +205,35 @@ export default function FolderExploreScreen() {
     if (id) initialize();
   }, [id, user?.id, user?.phone, user?.email]);
 
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
   const handleRefreshStatus = async () => {
     setRefreshing(true);
-    await checkAccess(folder);
-    setRefreshing(false);
+    Animated.loop(
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      })
+    ).start();
+
+    try {
+      await initialize();
+    } catch (e) {
+      console.warn('Folder refresh error:', e);
+    } finally {
+      setTimeout(() => {
+        spinAnim.stopAnimation();
+        spinAnim.setValue(0);
+        setRefreshing(false);
+      }, 400);
+    }
   };
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   // Multi-QR Code Parser from Admin Payment Settings
   let qrCodesList: any[] = [];
@@ -546,18 +571,37 @@ export default function FolderExploreScreen() {
                 : 'Part 2: Submit Verification Details'}
             </Text>
           </View>
-          <TouchableOpacity 
-            onPress={openWhatsAppHelp} 
-            style={styles.helpIconBtn}
-            activeOpacity={0.75}
-          >
-            <HelpCircle size={22} color="#059669" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity 
+              onPress={handleRefreshStatus} 
+              style={styles.helpIconBtn}
+              activeOpacity={0.75}
+              disabled={refreshing}
+            >
+              <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                <RotateCw size={19} color="#0072FF" />
+              </Animated.View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              onPress={openWhatsAppHelp} 
+              style={styles.helpIconBtn}
+              activeOpacity={0.75}
+            >
+              <HelpCircle size={22} color="#059669" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {paymentStep === 'details' ? (
           /* ================= PAGE 1: COURSE OVERVIEW ================= */
-          <ScrollView contentContainerStyle={styles.detailsScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.detailsScroll}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefreshStatus} colors={['#0072FF']} />
+            }
+          >
             {/* Top Badges */}
             <View style={styles.mainBadgeRow}>
               <View style={styles.mainPackageBadge}>
@@ -968,6 +1012,16 @@ export default function FolderExploreScreen() {
           </Text>
           <Text style={styles.headerSub}>Explore Content Catalog</Text>
         </View>
+        <TouchableOpacity
+          onPress={handleRefreshStatus}
+          style={styles.helpIconBtn}
+          activeOpacity={0.75}
+          disabled={refreshing}
+        >
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <RotateCw size={19} color="#0072FF" />
+          </Animated.View>
+        </TouchableOpacity>
       </View>
 
       {folder.isPaid && (
@@ -982,7 +1036,13 @@ export default function FolderExploreScreen() {
         </View>
       )}
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefreshStatus} colors={['#0072FF']} />
+        }
+      >
         {!hasContent && (
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconCircle}>

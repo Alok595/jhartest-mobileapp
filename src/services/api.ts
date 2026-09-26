@@ -257,3 +257,62 @@ export const fetchMyOrders = async () => {
   }
 };
 
+/* ================= PREFETCH / PRE-DOWNLOAD ================= */
+
+// Track which tests are already being prefetched to avoid duplicates
+const prefetchingSet = new Set<string>();
+
+/**
+ * Silently pre-downloads test data (metadata + questions + attempt) in the background.
+ * Call this when the user is browsing the series/test list page — BEFORE they tap "Start".
+ * When they finally tap Start, the test screen loads from cache in <1 second.
+ */
+export const prefetchTestData = async (testId: string): Promise<void> => {
+  if (!testId) return;
+
+  // Don't prefetch the same test twice
+  if (prefetchingSet.has(testId)) return;
+  prefetchingSet.add(testId);
+
+  try {
+    // Check if already cached and fresh
+    const cached = await getCachedData<any>(`test_start_${testId}`);
+    if (cached && cached.questions && cached.questions.length > 0) {
+      return; // Already have fresh data
+    }
+
+    const baseUrl = getApiBaseUrl();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${baseUrl}/tests/${testId}/start`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ viewMode: 'exam' }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      await setCachedData(`test_start_${testId}`, data);
+    }
+  } catch (e) {
+    // Silent — prefetch failures are not critical
+  } finally {
+    prefetchingSet.delete(testId);
+  }
+};
+
+/**
+ * Prefetch multiple tests in parallel (e.g. all tests in a series).
+ * Limits concurrency to avoid flooding the network.
+ */
+export const prefetchMultipleTests = async (testIds: string[]): Promise<void> => {
+  if (!testIds || testIds.length === 0) return;
+  
+  // Prefetch up to 3 at a time to avoid overwhelming the server
+  const batchSize = 3;
+  for (let i = 0; i < testIds.length; i += batchSize) {
+    const batch = testIds.slice(i, i + batchSize);
+    await Promise.allSettled(batch.map(id => prefetchTestData(id)));
+  }
+};

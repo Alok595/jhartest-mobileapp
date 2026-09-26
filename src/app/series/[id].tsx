@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   StatusBar,
+  Animated,
+  RefreshControl,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -20,9 +22,10 @@ import {
   Languages,
   TrendingUp,
   BookOpen,
+  RotateCw,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getApiBaseUrl, fetchUserAttempts, getCachedData, setCachedData } from '../../services/api';
+import { getApiBaseUrl, fetchUserAttempts, getCachedData, setCachedData, prefetchMultipleTests } from '../../services/api';
 
 export default function SeriesDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -31,8 +34,10 @@ export default function SeriesDetailScreen() {
   const [tests, setTests] = useState<any[]>([]);
   const [userAttempts, setUserAttempts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
   const [globalMaxAttempts, setGlobalMaxAttempts] = useState<number>(3);
+  const spinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const initInstantData = async () => {
@@ -92,6 +97,10 @@ export default function SeriesDetailScreen() {
             }));
             setTests(formatted);
             setCachedData(`series_tests_${id}`, formatted);
+
+            // Auto-prefetch test data in background so "Start" loads instantly
+            const testIds = formatted.map((t: any) => t.id).filter(Boolean);
+            prefetchMultipleTests(testIds);
           }
         }
 
@@ -158,6 +167,71 @@ export default function SeriesDetailScreen() {
     router.push(`/test/${activeTest.id}`);
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    Animated.loop(
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      })
+    ).start();
+
+    try {
+      const [sRes, tRes, userAttData, setRes] = await Promise.all([
+        fetch(`${getApiBaseUrl()}/test-series`).catch(() => null),
+        fetch(`${getApiBaseUrl()}/test-series/${id}/tests`).catch(() => null),
+        fetchUserAttempts().catch(() => []),
+        fetch(`${getApiBaseUrl()}/settings/exam`).catch(() => null),
+      ]);
+
+      if (sRes && sRes.ok) {
+        const all = await sRes.json();
+        setCachedData('test_series', all);
+        const item = all.find((s: any) => s.id === id);
+        if (item) setSeries(item);
+      }
+
+      let currentGlobalMax = 2;
+      if (setRes && setRes.ok) {
+        const setJson = await setRes.json();
+        if (setJson?.data?.maxAttempts !== undefined) {
+          currentGlobalMax = Number(setJson.data.maxAttempts);
+          setGlobalMaxAttempts(currentGlobalMax);
+        }
+      }
+
+      if (tRes && tRes.ok) {
+        const tList = await tRes.json();
+        if (Array.isArray(tList)) {
+          const formatted = tList.map((t) => ({
+            ...t,
+            maxAttempts: t.maxAttempts !== undefined ? t.maxAttempts : currentGlobalMax,
+          }));
+          setTests(formatted);
+          setCachedData(`series_tests_${id}`, formatted);
+        }
+      }
+
+      if (Array.isArray(userAttData)) {
+        setUserAttempts(userAttData);
+      }
+    } catch (e) {
+      console.warn('Series refresh error', e);
+    } finally {
+      setTimeout(() => {
+        spinAnim.stopAnimation();
+        spinAnim.setValue(0);
+        setRefreshing(false);
+      }, 400);
+    }
+  };
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -173,9 +247,22 @@ export default function SeriesDetailScreen() {
           <Text style={styles.backBtnText}>Back</Text>
         </TouchableOpacity>
 
-        <View style={styles.mockBadge}>
-          <Sparkles size={12} color="#00C853" style={{ marginRight: 4 }} />
-          <Text style={styles.mockBadgeText}>MOCK TEST</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            activeOpacity={0.7}
+            onPress={onRefresh}
+            disabled={refreshing}
+          >
+            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+              <RotateCw size={17} color="#0072FF" />
+            </Animated.View>
+          </TouchableOpacity>
+
+          <View style={styles.mockBadge}>
+            <Sparkles size={12} color="#00C853" style={{ marginRight: 4 }} />
+            <Text style={styles.mockBadgeText}>MOCK TEST</Text>
+          </View>
         </View>
       </View>
 
@@ -183,6 +270,9 @@ export default function SeriesDetailScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0072FF']} />
+        }
       >
         {/* Empty State */}
         {tests.length === 0 ? (
@@ -384,6 +474,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#1E293B',
+  },
+  refreshBtn: {
+    padding: 7,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   mockBadge: {
     flexDirection: 'row',

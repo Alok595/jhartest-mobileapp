@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking, Image } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking, Image, RefreshControl, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
@@ -14,11 +14,42 @@ import {
   ShieldCheck,
   HelpCircle,
   Package,
+  RotateCw,
 } from 'lucide-react-native';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, stats, logout } = useAuth();
+  const { user, stats, logout, refreshProfile } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    Animated.loop(
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      })
+    ).start();
+
+    try {
+      if (refreshProfile) await refreshProfile();
+    } catch (e) {
+      console.warn('Profile refresh error', e);
+    } finally {
+      setTimeout(() => {
+        spinAnim.stopAnimation();
+        spinAnim.setValue(0);
+        setRefreshing(false);
+      }, 500);
+    }
+  };
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out of JharTest?', [
@@ -29,7 +60,28 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      {/* Top Header with Refresh Button */}
+      <View style={styles.topHeader}>
+        <Text style={styles.topHeaderTitle}>My Profile</Text>
+        <TouchableOpacity
+          style={styles.refreshButton}
+          activeOpacity={0.7}
+          onPress={onRefresh}
+          disabled={refreshing}
+        >
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <RotateCw size={19} color="#0072FF" />
+          </Animated.View>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0072FF']} />
+        }
+      >
         
         {/* Profile Card */}
         <View style={styles.profileCard}>
@@ -199,6 +251,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  topHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  topHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+  },
+  refreshButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContent: {
     paddingBottom: 40,

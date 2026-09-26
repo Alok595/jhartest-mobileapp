@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
@@ -323,8 +323,8 @@ const styles = StyleSheet.create({
     marginLeft: 0,
   },
   headerFullLogo: {
-    height: 46,
-    width: 165,
+    height: 54,
+    width: 195,
   },
   headerRightActions: {
     flexDirection: 'row',

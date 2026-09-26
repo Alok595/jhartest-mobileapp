@@ -36,7 +36,7 @@ import {
   ZoomIn,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import { submitAttempt, getApiBaseUrl, fetchUserAttempts, startAttempt, syncAttempt, fetchAttemptDetails } from '../../services/api';
+import { submitAttempt, getApiBaseUrl, fetchUserAttempts, startAttempt, syncAttempt, fetchAttemptDetails, getCachedData } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -116,83 +116,66 @@ export default function MobileTestAttemptScreen() {
     }
   };
 
-  // Fetch Test & Questions dynamically
+  // Fetch Test & Questions dynamically via single combined endpoint
   useEffect(() => {
     const fetchTestData = async () => {
       try {
         setLoading(true);
-        // Initialize Attempt
-        let savedState: any = null;
-        if (id && (!initialViewMode || initialViewMode !== 'review')) {
-          const attempt = await startAttempt(id as string);
-          if (attempt && attempt.id) {
-            setAttemptId(attempt.id);
-            if (attempt.savedState) {
-               savedState = attempt.savedState;
-               if (savedState.answers) setAnswers(savedState.answers);
-               if (savedState.timeLeft) setTimeLeft(savedState.timeLeft);
-               if (savedState.currentQ) setCurrentQ(savedState.currentQ);
+        const baseUrl = getApiBaseUrl();
+        const isReview = initialViewMode === 'review';
+
+        let data: any = null;
+
+        // 1. Try to load from ultra-fast cache first (if not in review mode)
+        if (!isReview) {
+          try {
+            const cached = await getCachedData<any>(`test_start_${id}`);
+            if (cached && cached.questions && cached.questions.length > 0) {
+              data = cached;
+              console.log('Loaded test data from cache instantly!');
             }
-          }
-        } else if (initialViewMode === 'review' && reviewAttemptId) {
-          const attemptRes = await fetchAttemptDetails(reviewAttemptId as string);
-          if (attemptRes) {
-            setAttemptId(attemptRes.id);
-            if (attemptRes.answers) {
-              const parsedAnswers: Record<string, number> = {};
-              for (const [qId, val] of Object.entries(attemptRes.answers)) {
-                if (typeof val === 'string') {
-                  const upper = val.toUpperCase();
-                  if (upper === 'A') parsedAnswers[qId] = 0;
-                  else if (upper === 'B') parsedAnswers[qId] = 1;
-                  else if (upper === 'C') parsedAnswers[qId] = 2;
-                  else if (upper === 'D') parsedAnswers[qId] = 3;
-                  else parsedAnswers[qId] = Number(val) || 0;
-                } else if (typeof val === 'number') {
-                  parsedAnswers[qId] = val;
-                }
-              }
-              setAnswers(parsedAnswers);
-            }
-            
-            const result = {
-              score: Number(attemptRes.score || 0),
-              totalMarks: attemptRes.maxMarks || 0,
-              correct: attemptRes.correct || 0,
-              incorrect: attemptRes.incorrect || 0,
-              unanswered: attemptRes.unanswered || 0,
-              accuracy: attemptRes.accuracy || 0,
-              timeTaken: attemptRes.timeSpent || 0,
-              rank: attemptRes.rank || 1,
-              totalCandidates: attemptRes.totalCandidates || 1,
-              percentile: attemptRes.percentile || 100,
-            };
-            setTestResult(result);
-            
-            if (attemptRes.attemptNumber) {
-              setAttemptInfo({
-                 attemptNumber: attemptRes.attemptNumber,
-                 maxAttempts: attemptRes.maxAttempts || 2,
-                 remainingAttempts: attemptRes.remainingAttempts || 0,
-              });
-            }
+          } catch (e) {
+            console.log('Cache read error', e);
           }
         }
 
-        // 1. Fetch Test Meta
-        const tRes = await fetch(`${getApiBaseUrl()}/tests/${id}`);
-        if (tRes.ok) {
-          const t = await tRes.json();
-          setTestInfo(t);
-          if (t.duration) setTimeLeft(t.duration * 60);
+        // 2. If no cache, fetch from network
+        if (!data) {
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          const token = await (async () => {
+            try {
+              const AsyncStorageModule = require('@react-native-async-storage/async-storage');
+              const stored = await AsyncStorageModule.default.getItem('jhartest_auth_token');
+              return stored || null;
+            } catch { return null; }
+          })();
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+
+          const combinedRes = await fetch(`${baseUrl}/tests/${id}/start`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              viewMode: isReview ? 'review' : 'exam',
+              attemptId: isReview ? reviewAttemptId : undefined,
+            }),
+          });
+
+          if (combinedRes.ok) {
+            data = await combinedRes.json();
+          }
         }
 
-        // 2. Fetch Questions
-        const qRes = await fetch(`${getApiBaseUrl()}/tests/${id}/questions`);
-        if (qRes.ok) {
-          const qList = await qRes.json();
-          if (Array.isArray(qList) && qList.length > 0) {
-            const formatted = qList.map((q: any) => {
+        if (data) {
+
+          // ── Process test metadata ──
+          if (data.test) {
+            setTestInfo(data.test);
+            if (data.test.duration) setTimeLeft(data.test.duration * 60);
+          }
+
+          // ── Process questions ──
+          if (Array.isArray(data.questions) && data.questions.length > 0) {
+            const formatted = data.questions.map((q: any) => {
               const ansLetter = (q.correctAnswer || 'A').toUpperCase().trim();
               const ansIndex = ansLetter === 'B' ? 1 : ansLetter === 'C' ? 2 : ansLetter === 'D' ? 3 : 0;
               return {
@@ -227,46 +210,71 @@ export default function MobileTestAttemptScreen() {
             });
             setQuestions(formatted);
           }
-        }
 
-        // 3. Fetch User Attempts to check max limit
-        try {
-          const [userAtts, setRes] = await Promise.all([
-            fetchUserAttempts().catch(() => []),
-            fetch(`${getApiBaseUrl()}/settings/exam`).catch(() => null)
-          ]);
-
-          let globalSettingMax = 2;
-          if (setRes && setRes.ok) {
-            const setJson = await setRes.json();
-            if (setJson?.data?.maxAttempts !== undefined) {
-              globalSettingMax = Number(setJson.data.maxAttempts);
+          // ── Process attempt ──
+          if (data.attempt) {
+            setAttemptId(data.attempt.id);
+            if (!isReview && data.attempt.savedState) {
+              const savedState = data.attempt.savedState as any;
+              if (savedState.answers) setAnswers(savedState.answers);
+              if (savedState.timeLeft) setTimeLeft(savedState.timeLeft);
+              if (savedState.currentQ) setCurrentQ(savedState.currentQ);
             }
           }
 
-          if (Array.isArray(userAtts)) {
-            const completedAttempts = userAtts.filter((a: any) => (a.testId === id || a.test?.id === id) && a.status === 'SUBMITTED');
-            const maxAtt = testInfo?.maxAttempts !== undefined ? testInfo.maxAttempts : globalSettingMax;
-            const attNum = completedAttempts.length + 1;
-            const rem = maxAtt > 0 ? Math.max(0, maxAtt - completedAttempts.length) : 999;
+          // ── Process review stats ──
+          if (isReview && data.reviewStats) {
+            const rs = data.reviewStats;
+            if (rs.answers) {
+              const parsedAnswers: Record<string, number> = {};
+              for (const [qId, val] of Object.entries(rs.answers)) {
+                if (typeof val === 'string') {
+                  const upper = val.toUpperCase();
+                  if (upper === 'A') parsedAnswers[qId] = 0;
+                  else if (upper === 'B') parsedAnswers[qId] = 1;
+                  else if (upper === 'C') parsedAnswers[qId] = 2;
+                  else if (upper === 'D') parsedAnswers[qId] = 3;
+                  else parsedAnswers[qId] = Number(val) || 0;
+                } else if (typeof val === 'number') {
+                  parsedAnswers[qId] = val;
+                }
+              }
+              setAnswers(parsedAnswers);
+            }
+            setTestResult({
+              score: Number(rs.score || 0),
+              totalMarks: rs.totalMarks || 0,
+              correct: rs.correct || 0,
+              incorrect: rs.incorrect || 0,
+              unanswered: rs.unanswered || 0,
+              accuracy: rs.accuracy || 0,
+              timeTaken: rs.timeTaken || 0,
+              rank: rs.rank || 1,
+              totalCandidates: rs.totalCandidates || 1,
+              percentile: rs.percentile || 100,
+            });
+          }
 
+          // ── Process attempt info ──
+          if (data.attemptInfo) {
             setAttemptInfo({
-              attemptNumber: attNum,
-              maxAttempts: maxAtt,
-              remainingAttempts: rem,
+              attemptNumber: data.attemptInfo.attemptNumber || 1,
+              maxAttempts: data.attemptInfo.maxAttempts ?? 2,
+              remainingAttempts: data.attemptInfo.remainingAttempts ?? 1,
             });
 
-            if (initialViewMode !== 'review' && maxAtt > 0 && completedAttempts.length >= maxAtt) {
-              const latest = completedAttempts[0];
+            // Check if max attempts reached
+            if (!isReview && data.attemptInfo.maxAttempts > 0 && data.attemptInfo.remainingAttempts <= 0) {
+              const latestId = data.completedAttemptIds?.[0];
               Alert.alert(
                 'Attempts Limit Reached',
-                `You have completed your allowed ${maxAtt}/${maxAtt} attempts for this test. You can now review your solutions and result breakdown.`,
+                `You have completed your allowed ${data.attemptInfo.maxAttempts}/${data.attemptInfo.maxAttempts} attempts for this test. You can now review your solutions and result breakdown.`,
                 [
                   {
                     text: 'View Solutions',
                     onPress: () => {
-                      if (latest?.id) {
-                        router.replace(`/test/${id}?viewMode=review&attemptId=${latest.id}`);
+                      if (latestId) {
+                        router.replace(`/test/${id}?viewMode=review&attemptId=${latestId}`);
                       } else {
                         setViewMode('review');
                       }
@@ -276,8 +284,43 @@ export default function MobileTestAttemptScreen() {
               );
             }
           }
-        } catch (e) {
-          console.log('Error checking attempts in test:', e);
+        } else {
+          // Fallback: if combined endpoint not available, try legacy individual calls
+          console.warn('Combined endpoint failed, falling back to individual calls');
+          const [tRes, qRes] = await Promise.all([
+            fetch(`${baseUrl}/tests/${id}`).catch(() => null),
+            fetch(`${baseUrl}/tests/${id}/questions`).catch(() => null),
+          ]);
+          if (tRes && tRes.ok) {
+            const t = await tRes.json();
+            setTestInfo(t);
+            if (t.duration) setTimeLeft(t.duration * 60);
+          }
+          if (qRes && qRes.ok) {
+            const qList = await qRes.json();
+            if (Array.isArray(qList) && qList.length > 0) {
+              const formatted = qList.map((q: any) => {
+                const ansLetter = (q.correctAnswer || 'A').toUpperCase().trim();
+                const ansIndex = ansLetter === 'B' ? 1 : ansLetter === 'C' ? 2 : ansLetter === 'D' ? 3 : 0;
+                return {
+                  id: q.id, sectionName: q.sectionName || 'General',
+                  textEn: q.questionEn || q.questionHi || 'Question',
+                  textHi: q.questionHi || q.questionEn || 'Question',
+                  optionsEn: [q.optAEn || 'A', q.optBEn || 'B', q.optCEn || 'C', q.optDEn || 'D'],
+                  optionsHi: [q.optAHi || 'A', q.optBHi || 'B', q.optCHi || 'C', q.optDHi || 'D'],
+                  correctAnswer: ansIndex,
+                  marks: q.marks != null ? Number(q.marks) : 1,
+                  negativeMark: q.negativeMark != null ? Number(q.negativeMark) : 0,
+                  explanationEn: q.explanationEn || '', explanationHi: q.explanationHi || '',
+                  questionImageUrl: q.questionImageUrl || null,
+                  optAImageUrl: q.optAImageUrl || null, optBImageUrl: q.optBImageUrl || null,
+                  optCImageUrl: q.optCImageUrl || null, optDImageUrl: q.optDImageUrl || null,
+                  explanationImageUrl: q.explanationImageUrl || null,
+                };
+              });
+              setQuestions(formatted);
+            }
+          }
         }
       } catch (err) {
         console.error('Error loading mobile test:', err);
@@ -290,6 +333,8 @@ export default function MobileTestAttemptScreen() {
       fetchTestData();
     }
   }, [id]);
+
+
 
   // Track visited questions
   useEffect(() => {
@@ -565,26 +610,28 @@ function extractLanguageText(rawText: string | undefined | null, lang: 'EN' | 'H
   const text = rawText.toString().trim();
   if (!text) return '';
 
-  const delims = [' // ', ' / ', ' | ', '\n', '/'];
+  const hasHindi = /[\u0900-\u097F]/.test(text);
+  if (!hasHindi) {
+    return text;
+  }
+
+  const delims = [' // ', ' | ', '\n', ' / ', '/'];
   for (const delim of delims) {
     if (text.includes(delim)) {
       const parts = text.split(delim).map((p) => p.trim()).filter(Boolean);
       if (parts.length >= 2) {
         const hindiPart = parts.find((p) => /[\u0900-\u097F]/.test(p));
-        const englishPart = parts.find((p) => /[a-zA-Z]/.test(p) && !/[\u0900-\u097F]/.test(p));
+        // english part should not be just a single letter or number, avoiding splitting "x / y"
+        const englishPart = parts.find((p) => /[a-zA-Z]/.test(p) && !/[\u0900-\u097F]/.test(p) && p.length > 2);
 
-        if (lang === 'HI') {
-          if (hindiPart) return hindiPart;
-          return parts[1] || parts[0];
-        } else {
-          if (englishPart) return englishPart;
-          return parts[0];
+        if (hindiPart && englishPart) {
+          if (lang === 'HI') return hindiPart;
+          return englishPart;
         }
       }
     }
   }
 
-  const hasHindi = /[\u0900-\u097F]/.test(text);
   const hasEnglish = /[a-zA-Z]/.test(text);
   if (hasHindi && hasEnglish) {
     const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
