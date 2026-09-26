@@ -178,25 +178,37 @@ export default function FolderExploreScreen() {
     } catch (e) {}
 
     // 2. Background fresh fetch
-    const fData = await fetchFolder();
+    const fDataPromise = fetchFolder();
+    let ordersPromise: Promise<any> | null = null;
+    
+    if (user?.id) {
+      ordersPromise = apiClient.get(`/orders/my-orders?userId=${user.id}&folderId=${id}`)
+        .then(res => res)
+        .catch(() => null);
+    }
+
+    const fData = await fDataPromise;
+    const promises: Promise<any>[] = [];
+
     if (fData?.isPaid) {
-      await fetchPaymentSettings();
-      await checkAccess(fData);
+      promises.push(fetchPaymentSettings());
+      promises.push(checkAccess(fData));
     } else {
       setHasAccess(true);
     }
 
-    if (user?.id) {
-      try {
-        const res = await apiClient.get(`/orders/my-orders?userId=${user.id}`);
-        if (res.data?.success && res.data?.data) {
+    if (ordersPromise) {
+      promises.push(ordersPromise.then((res: any) => {
+        if (res?.data?.success && res.data?.data) {
            const pFolders = res.data.data.filter((o:any) => o.status === 'APPROVED' && o.folderId).map((o:any) => o.folderId);
            const pSeries = res.data.data.filter((o:any) => o.status === 'APPROVED' && o.seriesId).map((o:any) => o.seriesId);
            setPurchasedFolderIds(pFolders);
            setPurchasedSeriesIds(pSeries);
         }
-      } catch (e) {}
+      }));
     }
+
+    await Promise.all(promises);
 
     setLoading(false);
   };
@@ -1268,6 +1280,11 @@ export default function FolderExploreScreen() {
                         <Text style={styles.compactBtnDoneText}>View Result</Text>
                         <CheckCircle2 size={11} color="#059669" />
                       </TouchableOpacity>
+                    ) : ts.inProgressAttemptId ? (
+                      <View style={styles.compactBtnStart}>
+                        <Text style={styles.compactBtnStartText}>Resume</Text>
+                        <ChevronRight size={11} color="#FFFFFF" />
+                      </View>
                     ) : hasAttempts ? (
                       <View style={styles.compactBtnReattempt}>
                         <Text style={styles.compactBtnReattemptText}>Re-Attempt</Text>

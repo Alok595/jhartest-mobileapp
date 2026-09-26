@@ -148,6 +148,8 @@ export default function SeriesDetailScreen() {
     (a: any) => a.testId === activeTest?.id || a.test?.id === activeTest?.id
   );
   const completedAttempts = matchingAttempts.filter((a: any) => a.status === 'SUBMITTED');
+  const inProgressAttempt = matchingAttempts.find((a: any) => a.status === 'IN_PROGRESS');
+  
   const attemptCount = completedAttempts.length;
   const maxAttempts =
     activeTest?.maxAttempts !== undefined ? activeTest.maxAttempts : globalMaxAttempts;
@@ -426,6 +428,8 @@ export default function SeriesDetailScreen() {
                 <Text style={styles.actionStartBtnText}>
                   {isExhausted
                     ? 'View Result'
+                    : inProgressAttempt
+                    ? 'Resume Test'
                     : attemptCount > 0
                     ? 'Re-Attempt Test'
                     : 'Start Test'}

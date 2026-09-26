@@ -124,45 +124,66 @@ export default function MobileTestAttemptScreen() {
         const baseUrl = getApiBaseUrl();
         const isReview = initialViewMode === 'review';
 
+        // Reset all state for a fresh attempt
+        if (!isReview) {
+          setAnswers({});
+          setCurrentQ(0);
+          setTimeLeft(120 * 60);
+        }
+
         let data: any = null;
 
-        // 1. Try to load from ultra-fast cache first (if not in review mode)
+        // 1. Try to load from ultra-fast cache first for UI structure (Questions/Test Info)
         if (!isReview) {
           try {
             const cached = await getCachedData<any>(`test_start_${id}`);
             if (cached && cached.questions && cached.questions.length > 0) {
               data = cached;
-              console.log('Loaded test data from cache instantly!');
+              
+              // Only load questions and test metadata from cache, explicitly ignore the attempt state
+              if (data.test) setTestInfo(data.test);
+              if (data.questions) {
+                const formatted = data.questions.map((q: any) => {
+                  const ansLetter = q.correctAnswer;
+                  const ansIndex = ansLetter === 'B' ? 1 : ansLetter === 'C' ? 2 : ansLetter === 'D' ? 3 : 0;
+                  return {
+                    id: q.id, textEn: q.questionEn || q.questionHi || 'Question', textHi: q.questionHi || q.questionEn || 'Question',
+                    optionsEn: [q.optAEn || q.optAHi, q.optBEn || q.optBHi, q.optCEn || q.optCHi, q.optDEn || q.optDHi],
+                    optionsHi: [q.optAHi || q.optAEn, q.optBHi || q.optBEn, q.optCHi || q.optCEn, q.optDHi || q.optDEn],
+                    correctAnswer: ansIndex, marks: Number(q.marks) || 1, negativeMark: Number(q.negativeMark) || 0,
+                    questionImageUrl: q.questionImageUrl || null, optAImageUrl: q.optAImageUrl || null,
+                    optBImageUrl: q.optBImageUrl || null, optCImageUrl: q.optCImageUrl || null, optDImageUrl: q.optDImageUrl || null
+                  };
+                });
+                setQuestions(formatted);
+              }
+              console.log('Loaded test structural data from cache instantly!');
             }
-          } catch (e) {
-            console.log('Cache read error', e);
-          }
+          } catch (e) {}
         }
 
-        // 2. If no cache, fetch from network
-        if (!data) {
-          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-          const token = await (async () => {
-            try {
-              const AsyncStorageModule = require('@react-native-async-storage/async-storage');
-              const stored = await AsyncStorageModule.default.getItem('jhartest_auth_token');
-              return stored || null;
-            } catch { return null; }
-          })();
-          if (token) headers['Authorization'] = `Bearer ${token}`;
+        // 2. ALWAYS fetch from network to create/resume the REAL attempt
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        const token = await (async () => {
+          try {
+            const AsyncStorageModule = require('@react-native-async-storage/async-storage');
+            const stored = await AsyncStorageModule.default.getItem('jhartest_auth_token');
+            return stored || null;
+          } catch { return null; }
+        })();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
 
-          const combinedRes = await fetch(`${baseUrl}/tests/${id}/start`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-              viewMode: isReview ? 'review' : 'exam',
-              attemptId: isReview ? reviewAttemptId : undefined,
-            }),
-          });
+        const combinedRes = await fetch(`${baseUrl}/tests/${id}/start`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            viewMode: isReview ? 'review' : 'exam',
+            attemptId: isReview ? reviewAttemptId : undefined,
+          }),
+        });
 
-          if (combinedRes.ok) {
-            data = await combinedRes.json();
-          }
+        if (combinedRes.ok) {
+          data = await combinedRes.json();
         }
 
         if (data) {
@@ -1445,7 +1466,11 @@ function extractLanguageText(rawText: string | undefined | null, lang: 'EN' | 'H
       <View style={styles.topBar}>
         <View style={styles.topBarLeft}>
           <View style={styles.jtLogo}>
-            <Text style={styles.jtLogoText}>JT</Text>
+            <Image
+              source={require('../../../assets/images/emblem_transparent.png')}
+              style={styles.jtLogoImg}
+              contentFit="contain"
+            />
           </View>
           <Text style={styles.testTitleText} numberOfLines={1}>
             {testInfo?.title || 'Mock Test'}
@@ -2011,17 +2036,14 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   jtLogo: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: '#FFFFFF',
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  jtLogoText: {
-    color: '#0072FF',
-    fontWeight: '900',
-    fontSize: 12,
+  jtLogoImg: {
+    width: 36,
+    height: 36,
   },
   testTitleText: {
     color: '#FFFFFF',
