@@ -11,8 +11,6 @@ const { width, height } = Dimensions.get('window');
 // Keep native splash screen held until React Native layout mounts
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const brandLogo = require('../../assets/images/newlogo2.jpeg');
-
 // High-resilience Error Boundary to prevent any hard Android OS crashes
 class AppErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -57,27 +55,30 @@ export default function RootLayout() {
   const [isSplashDone, setIsSplashDone] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const splashScaleAnim = useRef(new Animated.Value(1)).current;
-  const logoScaleAnim = useRef(new Animated.Value(0.4)).current;
-  const logoRotateAnim = useRef(new Animated.Value(0)).current;
-  const glowScaleAnim = useRef(new Animated.Value(0.8)).current;
-  const textFadeAnim = useRef(new Animated.Value(0)).current;
-  const textTranslateAnim = useRef(new Animated.Value(24)).current;
-  const sloganFadeAnim = useRef(new Animated.Value(0)).current;
-  const sloganScaleAnim = useRef(new Animated.Value(0.85)).current;
-  const sloganTranslateAnim = useRef(new Animated.Value(18)).current;
-  const lineExpandAnim = useRef(new Animated.Value(0)).current;
+
+  // Granular Animations
+  const logoScaleAnim = useRef(new Animated.Value(0.5)).current;
+  const logoOpacityAnim = useRef(new Animated.Value(0)).current;
+  
+  const textTranslateAnim = useRef(new Animated.Value(30)).current;
+  const textOpacityAnim = useRef(new Animated.Value(0)).current;
+  
+  const lineScaleAnim = useRef(new Animated.Value(0)).current;
+  
+  const sloganTranslateAnim = useRef(new Animated.Value(20)).current;
+  const sloganOpacityAnim = useRef(new Animated.Value(0)).current;
 
   const finishSplash = () => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 500,
+        duration: 450,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(splashScaleAnim, {
-        toValue: 1.06,
-        duration: 500,
+        toValue: 1.05,
+        duration: 450,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
@@ -87,94 +88,39 @@ export default function RootLayout() {
   };
 
   useEffect(() => {
-    // Hide native splash screen so custom branding renders immediately
+    // Hide native splash screen
     SplashScreen.hideAsync().catch(() => {});
 
-    // Premium entrance animation sequence with staggered parallel timings
-    Animated.parallel([
-      // 1. Logo spring reveal with subtle spin & glow pulse
-      Animated.spring(logoScaleAnim, {
-        toValue: 1,
-        tension: 55,
-        friction: 6,
-        useNativeDriver: true,
-      }),
-      Animated.timing(logoRotateAnim, {
-        toValue: 1,
-        duration: 650,
-        easing: Easing.out(Easing.back(1.5)),
-        useNativeDriver: true,
-      }),
-      Animated.timing(glowScaleAnim, {
-        toValue: 1.3,
-        duration: 1000,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-
-      // 2. Brand Name "jhartest" slides up smoothly at 200ms
-      Animated.sequence([
-        Animated.delay(200),
-        Animated.parallel([
-          Animated.timing(textFadeAnim, {
-            toValue: 1,
-            duration: 450,
-            useNativeDriver: true,
-          }),
-          Animated.spring(textTranslateAnim, {
-            toValue: 0,
-            tension: 65,
-            friction: 7,
-            useNativeDriver: true,
-          }),
-          Animated.timing(lineExpandAnim, {
-            toValue: 1,
-            duration: 500,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: false,
-          }),
-        ]),
+    // Stunning Staggered Sequence (100% Native Driver)
+    Animated.stagger(250, [
+      // 1. Logo scales up and fades in
+      Animated.parallel([
+        Animated.spring(logoScaleAnim, { toValue: 1, tension: 60, friction: 7, useNativeDriver: true }),
+        Animated.timing(logoOpacityAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
       ]),
-
-      // 3. Slogan "prep smarter • score higher" appears boldly at 400ms
-      Animated.sequence([
-        Animated.delay(400),
-        Animated.parallel([
-          Animated.timing(sloganFadeAnim, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.spring(sloganScaleAnim, {
-            toValue: 1,
-            tension: 60,
-            friction: 7,
-            useNativeDriver: true,
-          }),
-          Animated.spring(sloganTranslateAnim, {
-            toValue: 0,
-            tension: 60,
-            friction: 7,
-            useNativeDriver: true,
-          }),
-        ]),
+      // 2. Title slides up and fades in
+      Animated.parallel([
+        Animated.spring(textTranslateAnim, { toValue: 0, tension: 60, friction: 8, useNativeDriver: true }),
+        Animated.timing(textOpacityAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ]),
+      // 3. Green line expands outward (scaleX)
+      Animated.spring(lineScaleAnim, { toValue: 1, tension: 80, friction: 7, useNativeDriver: true }),
+      // 4. Slogan slides up and fades in
+      Animated.parallel([
+        Animated.spring(sloganTranslateAnim, { toValue: 0, tension: 60, friction: 8, useNativeDriver: true }),
+        Animated.timing(sloganOpacityAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
       ]),
     ]).start();
 
-    // Smooth transition to main app after extended brand showcase (3.2s)
+    // Transition to main app
     const timer = setTimeout(() => {
       finishSplash();
-    }, 3200);
+    }, 3800);
 
     return () => {
       clearTimeout(timer);
     };
   }, []);
-
-  const logoSpin = logoRotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['-15deg', '0deg'],
-  });
 
   return (
     <AppErrorBoundary>
@@ -206,78 +152,63 @@ export default function RootLayout() {
                 },
               ]}
             >
-              <StatusBar style="light" />
-
-              {/* Ambient Glow Backdrop */}
-              <Animated.View
-                style={[
-                  styles.ambientGlow,
-                  {
-                    transform: [{ scale: glowScaleAnim }],
-                  },
-                ]}
-              />
+              <StatusBar style="dark" />
 
               <View style={styles.brandWrapper}>
-                {/* Logo with Spring + Spin Entrance */}
+                {/* 1. Logo */}
                 <Animated.View
                   style={[
                     styles.logoCard,
                     {
-                      transform: [{ scale: logoScaleAnim }, { rotate: logoSpin }],
+                      opacity: logoOpacityAnim,
+                      transform: [{ scale: logoScaleAnim }],
                     },
                   ]}
                 >
                   <Image
-                    source={brandLogo}
+                    source={require('../../assets/images/newlogo2.jpeg')}
                     style={styles.logoImage}
                     contentFit="contain"
-                    transition={200}
                   />
                 </Animated.View>
 
-                {/* Animated Brand Name: jhartest */}
+                {/* 2. Text */}
                 <Animated.View
                   style={{
-                    opacity: textFadeAnim,
+                    opacity: textOpacityAnim,
                     transform: [{ translateY: textTranslateAnim }],
-                    alignItems: 'center',
-                    marginTop: 20,
+                    marginTop: 12,
                   }}
                 >
-                  <Text style={styles.brandName}>
-                    jhar<Text style={styles.brandNameHighlight}>test</Text>
-                  </Text>
+                  <Image
+                    source={require('../../assets/images/title.png')}
+                    style={styles.titleImage}
+                    contentFit="contain"
+                  />
                 </Animated.View>
 
-                {/* Animated Gradient Accent Divider */}
+                {/* 3. Divider Line (scaleX for native driver) */}
                 <Animated.View
                   style={[
                     styles.accentLine,
                     {
-                      width: lineExpandAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, 140],
-                      }),
+                      transform: [{ scaleX: lineScaleAnim }],
                     },
                   ]}
                 />
 
-                {/* Animated Slogan: Prep Smarter • Score Higher */}
+                {/* 4. Slogan */}
                 <Animated.View
                   style={{
-                    opacity: sloganFadeAnim,
-                    transform: [
-                      { translateY: sloganTranslateAnim },
-                      { scale: sloganScaleAnim },
-                    ],
-                    alignItems: 'center',
-                    marginTop: 12,
+                    opacity: sloganOpacityAnim,
+                    transform: [{ translateY: sloganTranslateAnim }],
                   }}
                 >
-                  <Text style={styles.brandSlogan}>
-                    Prep Smarter <Text style={styles.sloganDot}>•</Text> Score Higher
-                  </Text>
+                  <Image
+                    source={require('../../assets/images/slogan.png')}
+                    style={styles.sloganImage}
+                    contentFit="contain"
+                  />
                 </Animated.View>
               </View>
             </Animated.View>
@@ -348,6 +279,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+    width: '100%',
   },
   logoCard: {
     width: 200,
@@ -359,33 +291,20 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  brandName: {
-    fontSize: 44,
-    fontWeight: '900',
-    color: '#0F172A',
-    letterSpacing: 1.5,
-    textTransform: 'lowercase',
-  },
-  brandNameHighlight: {
-    color: '#00C853',
+  titleImage: {
+    width: 220,
+    height: 48,
   },
   accentLine: {
-    height: 2.5,
+    width: 110,
+    height: 3,
     backgroundColor: '#00C853',
     borderRadius: 2,
-    marginTop: 6,
-    marginBottom: 2,
+    marginTop: 8,
+    marginBottom: 8,
   },
-  brandSlogan: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#475569',
-    letterSpacing: 1.8,
-    textAlign: 'center',
-  },
-  sloganDot: {
-    color: '#00C853',
-    fontSize: 16,
-    fontWeight: '900',
+  sloganImage: {
+    width: 180,
+    height: 18,
   },
 });

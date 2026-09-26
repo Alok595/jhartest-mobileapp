@@ -4,24 +4,24 @@
     "slug": "jhartest-mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/newlogo2.jpeg",
+    "icon": "./assets/images/app-icon.png",
     "scheme": "jhartestapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/newlogo2.jpeg"
+      "icon": "./assets/images/app-icon.png"
     },
     "android": {
       "package": "com.jhartest.app",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
-        "foregroundImage": "./assets/images/newlogo2.jpeg"
+        "foregroundImage": "./assets/images/app-icon.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/newlogo2.jpeg"
+      "favicon": "./assets/images/app-icon.png"
     },
     "plugins": [
       "expo-router",
