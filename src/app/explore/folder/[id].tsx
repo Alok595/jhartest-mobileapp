@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking, Alert, TextInput, Platform } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking, Alert, TextInput, Platform, Animated } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,7 +20,15 @@ import {
   Zap,
   HelpCircle,
   Smartphone,
-  Award
+  Award,
+  ClipboardCheck,
+  TrendingUp,
+  BookOpen,
+  Info,
+  User,
+  Mail,
+  CreditCard,
+  QrCode
 } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Clipboard from 'expo-clipboard';
@@ -40,10 +48,10 @@ export default function FolderExploreScreen() {
   const [accessReason, setAccessReason] = useState('NO_ORDER');
   const [orderData, setOrderData] = useState<any>(null);
   
-  // Payment Settings & 2-Page Flow
+  // Payment Settings & 2-Part Flow
   const [paymentSettings, setPaymentSettings] = useState<any>(null);
   const [selectedQrId, setSelectedQrId] = useState<string | null>(null);
-  const [paymentStep, setPaymentStep] = useState<'details' | 'payment'>('details');
+  const [paymentStep, setPaymentStep] = useState<'details' | 'qr' | 'form'>('details');
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [studentName, setStudentName] = useState(user?.name || '');
   const [studentPhone, setStudentPhone] = useState(user?.phone || '');
@@ -51,6 +59,39 @@ export default function FolderExploreScreen() {
   const [transactionId, setTransactionId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  
+  const [purchasedFolderIds, setPurchasedFolderIds] = useState<string[]>([]);
+  const [purchasedSeriesIds, setPurchasedSeriesIds] = useState<string[]>([]);
+
+  // Animated Glowing Button Border
+  const borderAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(borderAnim, {
+          toValue: 1,
+          duration: 1400,
+          useNativeDriver: false,
+        }),
+        Animated.timing(borderAnim, {
+          toValue: 0,
+          duration: 1400,
+          useNativeDriver: false,
+        }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  const animatedBorderColor = borderAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ['#86EFAC', '#FDE047', '#38BDF8'], // smooth glow from Emerald -> Gold -> Sky Cyan
+  });
+  const animatedScale = borderAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.015, 1],
+  });
 
   useEffect(() => {
     if (user) {
@@ -143,6 +184,19 @@ export default function FolderExploreScreen() {
     } else {
       setHasAccess(true);
     }
+
+    if (user?.id) {
+      try {
+        const res = await apiClient.get(`/orders/my-orders?userId=${user.id}`);
+        if (res.data?.success && res.data?.data) {
+           const pFolders = res.data.data.filter((o:any) => o.status === 'APPROVED' && o.folderId).map((o:any) => o.folderId);
+           const pSeries = res.data.data.filter((o:any) => o.status === 'APPROVED' && o.seriesId).map((o:any) => o.seriesId);
+           setPurchasedFolderIds(pFolders);
+           setPurchasedSeriesIds(pSeries);
+        }
+      } catch (e) {}
+    }
+
     setLoading(false);
   };
 
@@ -208,7 +262,7 @@ export default function FolderExploreScreen() {
       );
       return;
     }
-    setPaymentStep('payment');
+    setPaymentStep('qr');
   };
 
   const validatePaymentInputs = () => {
@@ -305,7 +359,10 @@ export default function FolderExploreScreen() {
             { 
               text: 'Send WhatsApp', 
               onPress: async () => {
-                const message = `Hello JharTest, I have submitted a payment request for a premium folder.\n\n📚 Folder: ${folder.name}\n💰 Amount: ₹${finalPrice}\n👤 Name: ${studentName.trim()}\n📱 Phone: ${studentPhone.trim()}\n🔖 UTR / Transaction ID: ${transactionId.trim()}`;
+                const orderId = data.data?.id;
+                const approveUrl = orderId ? `${getApiBaseUrl()}/orders/${orderId}?action=approve` : '';
+                const rejectUrl = orderId ? `${getApiBaseUrl()}/orders/${orderId}?action=reject` : '';
+                const message = `Hello JharTest, I have submitted a payment request for a premium folder.\n\n📚 Folder: ${folder.name}\n💰 Amount: ₹${finalPrice}\n👤 Name: ${studentName.trim()}\n📱 Phone: ${studentPhone.trim()}\n📧 Email: ${studentEmail.trim() || user?.email || 'N/A'}\n🔖 UTR / Transaction ID: ${transactionId.trim()}\n\n✅ Approve Link:\n${approveUrl}\n\n❌ Reject Link:\n${rejectUrl}`;
                 const whatsappUrl = `whatsapp://send?phone=917903466871&text=${encodeURIComponent(message)}`;
                 try {
                   await Linking.openURL(whatsappUrl);
@@ -469,11 +526,9 @@ export default function FolderExploreScreen() {
           <TouchableOpacity 
             style={styles.backBtn} 
             onPress={() => {
-              if (paymentStep === 'payment') {
-                setPaymentStep('details');
-              } else {
-                router.back();
-              }
+              if (paymentStep === 'form') setPaymentStep('qr');
+              else if (paymentStep === 'qr') setPaymentStep('details');
+              else router.back();
             }} 
             activeOpacity={0.7}
           >
@@ -482,7 +537,11 @@ export default function FolderExploreScreen() {
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle} numberOfLines={1}>{folder.name}</Text>
             <Text style={styles.headerSub}>
-              {paymentStep === 'details' ? 'Course Overview & Curriculum' : 'Payment & Verification'}
+              {paymentStep === 'details' 
+                ? 'Course Overview' 
+                : paymentStep === 'qr'
+                ? 'Part 1: Scan & Pay via UPI'
+                : 'Part 2: Submit Verification Details'}
             </Text>
           </View>
           <TouchableOpacity 
@@ -495,287 +554,270 @@ export default function FolderExploreScreen() {
         </View>
 
         {paymentStep === 'details' ? (
-          /* ================= PAGE 1: COURSE DETAILS & OVERVIEW ================= */
-          <View style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={styles.detailsScroll} showsVerticalScrollIndicator={false}>
-              {/* Hero Package Banner */}
-              <View style={styles.heroCard}>
-                <View style={styles.heroBadgeRow}>
-                  <View style={styles.premiumPill}>
-                    <Sparkles size={12} color="#F59E0B" />
-                    <Text style={styles.premiumPillText}>PREMIUM COURSE PACKAGE</Text>
-                  </View>
-                  <View style={styles.lockedPill}>
-                    <Lock size={12} color="#94A3B8" />
-                    <Text style={styles.lockedPillText}>ENROLLMENT OPEN</Text>
-                  </View>
-                </View>
-
-                <Text style={styles.heroTitle}>{folder.name}</Text>
-                
-                {folder.description ? (
-                  <Text style={styles.heroDesc}>{folder.description}</Text>
-                ) : (
-                  <Text style={styles.heroDesc}>
-                    Complete preparation package with full mock tests, high-yield PDF revision notes, and chapter-wise learning modules.
-                  </Text>
-                )}
-
-                {/* Pricing Banner */}
-                <View style={styles.heroPriceRow}>
-                  <View>
-                    <Text style={styles.heroPriceLabel}>SPECIAL OFFER PRICE</Text>
-                    <View style={styles.priceFigures}>
-                      <Text style={styles.heroPriceFinal}>₹{finalPrice}</Text>
-                      {isDiscounted && (
-                        <Text style={styles.heroPriceOriginal}>₹{folder.price}</Text>
-                      )}
-                      {isDiscounted && (
-                        <View style={styles.discountPill}>
-                          <Text style={styles.discountPillText}>{discountPercent}% OFF</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-
-                  <View style={styles.validityBadge}>
-                    <Clock size={14} color="#047857" />
-                    <Text style={styles.validityBadgeText}>
-                      {folder.validity ? `${folder.validity} Days Access` : '365 Days Access'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.heroSecurityNote}>
-                  <ShieldCheck size={14} color="#10B981" />
-                  <Text style={styles.heroSecurityText}>Instant Activation • 100% Verified Syllabus</Text>
-                </View>
+          /* ================= PAGE 1: COURSE OVERVIEW ================= */
+          <ScrollView contentContainerStyle={styles.detailsScroll} showsVerticalScrollIndicator={false}>
+            {/* Top Badges */}
+            <View style={styles.mainBadgeRow}>
+              <View style={styles.mainPackageBadge}>
+                <Sparkles size={12} color="#00C853" />
+                <Text style={styles.mainPackageBadgeText}>PREMIUM PACKAGE</Text>
               </View>
-
-              {/* What You Get in this Package */}
-              <View style={styles.featuresCard}>
-                <View style={styles.featuresHeader}>
-                  <View style={styles.featuresIconCircle}>
-                    <Award size={18} color="#4F46E5" />
-                  </View>
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.featuresTitle}>What You Get In This Package</Text>
-                    <Text style={styles.featuresSub}>Curated by expert teachers for Jharkhand competitive exams</Text>
-                  </View>
-                </View>
-
-                <View style={styles.featureList}>
-                  {/* Test Series feature */}
-                  <View style={styles.featureItem}>
-                    <View style={[styles.featureBullet, { backgroundColor: '#EEF2FF' }]}>
-                      <Zap size={16} color="#4F46E5" />
-                    </View>
-                    <View style={styles.featureTextCol}>
-                      <Text style={styles.featureHeading}>
-                        {testsCount > 0 ? `${testsCount} Mock Tests Included` : 'Full & Subject Mock Tests'}
-                      </Text>
-                      <Text style={styles.featureDetail}>
-                        Real exam interface with timer, negative marking, instant rank, scorecard and detailed solutions.
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Materials feature */}
-                  <View style={styles.featureItem}>
-                    <View style={[styles.featureBullet, { backgroundColor: '#F0FDF4' }]}>
-                      <FileText size={16} color="#16A34A" />
-                    </View>
-                    <View style={styles.featureTextCol}>
-                      <Text style={styles.featureHeading}>
-                        {materialsCount > 0 ? `${materialsCount} Revision Notes & PDFs` : 'Study Materials & Downloadable PDFs'}
-                      </Text>
-                      <Text style={styles.featureDetail}>
-                        Comprehensive chapter notes, high-yield formula sheets, and subject summaries.
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Subfolders feature */}
-                  {subfoldersCount > 0 && (
-                    <View style={styles.featureItem}>
-                      <View style={[styles.featureBullet, { backgroundColor: '#EFF6FF' }]}>
-                        <Folder size={16} color="#0284C7" />
-                      </View>
-                      <View style={styles.featureTextCol}>
-                        <Text style={styles.featureHeading}>
-                          {`${subfoldersCount} Chapter & Topic Modules`}
-                        </Text>
-                        <Text style={styles.featureDetail}>
-                          Systematically organized chapter-by-chapter breakdown for zero confusion.
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Universal perks */}
-                  <View style={styles.featureItem}>
-                    <View style={[styles.featureBullet, { backgroundColor: '#FFFBEB' }]}>
-                      <Smartphone size={16} color="#D97706" />
-                    </View>
-                    <View style={styles.featureTextCol}>
-                      <Text style={styles.featureHeading}>Unlimited Re-attempts & Mobile App</Text>
-                      <Text style={styles.featureDetail}>
-                        Re-attempt tests anytime to improve speed and accuracy on mobile and tablet.
-                      </Text>
-                    </View>
-                  </View>
-                </View>
+              <View style={styles.mainValidityBadge}>
+                <Clock size={12} color="#00C853" />
+                <Text style={styles.mainValidityBadgeText}>
+                  {folder.validity ? `${folder.validity} Days Access` : '365 Days Access'}
+                </Text>
               </View>
+            </View>
 
-              {/* Direct Help Button */}
-              <TouchableOpacity 
-                style={styles.detailsWhatsappRow} 
-                onPress={openWhatsAppHelp}
-                activeOpacity={0.7}
-              >
-                <HelpCircle size={16} color="#059669" />
-                <Text style={styles.detailsWhatsappText}>Have questions before enrolling? Chat on WhatsApp</Text>
-              </TouchableOpacity>
-            </ScrollView>
+            {/* Title & Description */}
+            <Text style={styles.mainScreenTitle}>{folder.name}</Text>
+            
+            <Text style={styles.mainScreenDesc}>
+              {folder.description ||
+                'Complete preparation package with full mock tests, high-yield PDF revision notes, and chapter-wise learning modules.'}
+            </Text>
 
-            {/* Fixed Bottom Action Bar */}
-            <View style={styles.bottomBar}>
-              <View style={styles.bottomPriceCol}>
-                <Text style={styles.bottomPriceLabel}>TOTAL PRICE</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                  <Text style={styles.bottomFinalPrice}>₹{finalPrice}</Text>
+            {/* Special Offer Price Box */}
+            <View style={styles.mainPriceBox}>
+              <View>
+                <Text style={styles.mainPriceLabel}>SPECIAL OFFER PRICE</Text>
+                <View style={styles.mainPriceFigures}>
+                  <Text style={styles.mainFinalPrice}>₹{finalPrice}</Text>
                   {isDiscounted && (
-                    <Text style={styles.bottomOriginalPrice}>₹{folder.price}</Text>
+                    <Text style={styles.mainOriginalPrice}>₹{folder.price}</Text>
+                  )}
+                  {isDiscounted && (
+                    <View style={styles.mainDiscountBadge}>
+                      <Text style={styles.mainDiscountText}>{discountPercent}% OFF</Text>
+                    </View>
                   )}
                 </View>
               </View>
 
-              <TouchableOpacity 
-                style={styles.continuePaymentBtn} 
-                onPress={handleProceedToPayment}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.continuePaymentBtnText}>Continue to Payment</Text>
-                <ChevronRight size={18} color="#FFFFFF" strokeWidth={3} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          /* ================= PAGE 2: PAYMENT & VERIFICATION ONLY ================= */
-          <ScrollView contentContainerStyle={styles.paymentScroll} showsVerticalScrollIndicator={false}>
-            {/* Order Recap Banner */}
-            <View style={styles.recapBanner}>
-              <View style={styles.recapLeft}>
-                <Text style={styles.recapLabel}>ENROLLING IN PACKAGE</Text>
-                <Text style={styles.recapTitle} numberOfLines={2}>{folder.name}</Text>
-                <Text style={styles.recapPrice}>Amount to Pay: ₹{finalPrice}</Text>
+              <View style={styles.mainSyllabusTag}>
+                <ShieldCheck size={13} color="#008A38" />
+                <Text style={styles.mainSyllabusTagText}>Full Syllabus</Text>
               </View>
-              <TouchableOpacity 
-                style={styles.recapChangeBtn} 
-                onPress={() => setPaymentStep('details')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.recapChangeText}>← Course Info</Text>
-              </TouchableOpacity>
             </View>
 
-            {/* Payment Box (QR & UPI ID) */}
-            <View style={styles.paymentBox}>
-              <View style={styles.paymentBoxHeader}>
-                <Text style={styles.paymentBoxTitle}>Pay ₹{finalPrice} via UPI</Text>
-                <Text style={styles.paymentBoxSub}>Scan QR code using any UPI App (GPay, PhonePe, Paytm)</Text>
-              </View>
+            {/* Primary Action Button with Animated Glowing Border */}
+            <Animated.View
+              style={{
+                transform: [{ scale: animatedScale }],
+                borderRadius: 16,
+                borderWidth: 2,
+                borderColor: animatedBorderColor,
+                backgroundColor: '#00C853',
+                shadowColor: '#00C853',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.35,
+                shadowRadius: 8,
+                elevation: 5,
+                marginBottom: 10,
+                overflow: 'hidden',
+              }}
+            >
+              <TouchableOpacity
+                style={styles.mainPayBtn}
+                onPress={() => setPaymentStep('qr')}
+                activeOpacity={0.88}
+              >
+                <Text style={styles.mainPayBtnText}>Continue to Payment (₹{finalPrice})</Text>
+                <ChevronRight size={20} color="#FFFFFF" strokeWidth={3} />
+              </TouchableOpacity>
+            </Animated.View>
 
-              {/* Multi-QR Scanner Selector Tabs */}
-              {qrCodesList.length > 1 && (
-                <View style={styles.scannerSelectorContainer}>
-                  <Text style={styles.scannerSelectorLabel}>Choose Payment QR:</Text>
-                  <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false} 
-                    contentContainerStyle={styles.qrTabsContainer}
-                  >
-                    {qrCodesList.map((qr: any) => {
-                      const isSelected = (currentQr && currentQr.id === qr.id);
-                      return (
-                        <TouchableOpacity
-                          key={qr.id}
-                          onPress={() => setSelectedQrId(qr.id)}
-                          style={[
-                            styles.qrTabButton,
-                            isSelected && styles.qrTabButtonActive
-                          ]}
-                        >
-                          <Text style={[styles.qrTabText, isSelected && styles.qrTabTextActive]}>
-                            {qr.title || 'QR Scanner'}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
+            <View style={styles.mainTrustRow}>
+              <CheckCircle2 size={13} color="#00C853" />
+              <Text style={styles.mainTrustText}>Instant Activation • 100% Verified Exam Syllabus</Text>
+            </View>
+
+            {/* 4 Clean Feature Items */}
+            <View style={styles.mainFeaturesSection}>
+              <Text style={styles.mainFeaturesSectionTitle}>Included in this package</Text>
+
+              <View style={styles.mainFeaturesGrid}>
+                {/* 1. Rank & Analytics */}
+                <View style={styles.mainFeatureItem}>
+                  <View style={styles.mainFeatureIconWrap}>
+                    <TrendingUp size={16} color="#00C853" />
+                  </View>
+                  <View style={styles.mainFeatureTextWrap}>
+                    <Text style={styles.mainFeatureName}>Rank & Analytics</Text>
+                    <Text style={styles.mainFeatureSub}>State-level rank, percentile & speed analysis</Text>
+                  </View>
                 </View>
-              )}
 
-              {/* UPI ID Pill with Copy */}
-              <View style={styles.upiContainer}>
-                <View style={styles.upiInfo}>
-                  <Text style={styles.upiTag}>OFFICIAL UPI ID</Text>
-                  <Text style={styles.upiText} selectable={true}>{activeUpiId}</Text>
+                {/* 2. Detailed Report Card */}
+                <View style={styles.mainFeatureItem}>
+                  <View style={styles.mainFeatureIconWrap}>
+                    <Award size={16} color="#00C853" />
+                  </View>
+                  <View style={styles.mainFeatureTextWrap}>
+                    <Text style={styles.mainFeatureName}>Instant Report Card</Text>
+                    <Text style={styles.mainFeatureSub}>Accuracy, score breakdown & question time metrics</Text>
+                  </View>
                 </View>
-                <TouchableOpacity 
-                  style={[styles.copyBtn, copiedUpi && styles.copyBtnSuccess]} 
-                  onPress={() => copyToClipboard(activeUpiId)}
-                  activeOpacity={0.8}
-                >
-                  {copiedUpi ? (
-                    <>
-                      <Check size={14} color="#FFFFFF" strokeWidth={3} />
-                      <Text style={styles.copyBtnTextSuccess}>Copied</Text>
-                    </>
-                  ) : (
-                    <>
-                      <Copy size={14} color="#4F46E5" />
-                      <Text style={styles.copyBtnText}>Copy</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
 
-              {/* Dynamic QR Code Image */}
-              <View style={styles.qrFrame}>
-                {activeQrUrl ? (
-                  <Image 
-                    source={{ uri: activeQrUrl }} 
-                    style={styles.qrImage}
-                    contentFit="contain" 
-                  />
+                {/* 3. Question Analysis with Solutions */}
+                <View style={styles.mainFeatureItem}>
+                  <View style={styles.mainFeatureIconWrap}>
+                    <BookOpen size={16} color="#00C853" />
+                  </View>
+                  <View style={styles.mainFeatureTextWrap}>
+                    <Text style={styles.mainFeatureName}>Question Analysis with Solutions</Text>
+                    <Text style={styles.mainFeatureSub}>Step-by-step explanations for every question</Text>
+                  </View>
+                </View>
+
+                {/* 4. Based on Exam Pattern */}
+                <View style={styles.mainFeatureItem}>
+                  <View style={styles.mainFeatureIconWrap}>
+                    <CheckCircle2 size={16} color="#00C853" />
+                  </View>
+                  <View style={styles.mainFeatureTextWrap}>
+                    <Text style={styles.mainFeatureName}>Based on Exam Pattern</Text>
+                    <Text style={styles.mainFeatureSub}>Strictly designed as per latest official syllabus & marking scheme</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Direct WhatsApp Help */}
+            <TouchableOpacity 
+              style={styles.mainWhatsappBtn} 
+              onPress={openWhatsAppHelp}
+              activeOpacity={0.7}
+            >
+              <HelpCircle size={15} color="#059669" />
+              <Text style={styles.mainWhatsappText}>Have questions before enrolling? Chat on WhatsApp</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        ) : paymentStep === 'qr' ? (
+          /* ================= PAGE 2 (PART 1): SCAN & PAY VIA UPI ================= */
+          <ScrollView contentContainerStyle={styles.detailsScroll} showsVerticalScrollIndicator={false}>
+            {/* Price & Status Header */}
+            <View style={styles.compactPriceHeader}>
+              <View style={styles.compactPriceLeft}>
+                <Sparkles size={13} color="#00C853" />
+                <Text style={styles.compactPriceCourseName} numberOfLines={1}>{folder.name}</Text>
+              </View>
+              <View style={styles.compactPriceBadge}>
+                <Text style={styles.compactPriceTextMain}>₹{finalPrice}</Text>
+              </View>
+            </View>
+
+            {/* UPI ID Pill with Copy */}
+            <View style={styles.upiContainer}>
+              <View style={styles.upiInfo}>
+                <Text style={styles.upiTag}>OFFICIAL UPI ID</Text>
+                <Text style={styles.upiText} selectable={true}>{activeUpiId}</Text>
+              </View>
+              <TouchableOpacity 
+                style={[styles.copyBtn, copiedUpi && styles.copyBtnSuccess]} 
+                onPress={() => copyToClipboard(activeUpiId)}
+                activeOpacity={0.8}
+              >
+                {copiedUpi ? (
+                  <>
+                    <Check size={13} color="#FFFFFF" strokeWidth={3} />
+                    <Text style={styles.copyBtnTextSuccess}>Copied</Text>
+                  </>
                 ) : (
-                  <Image 
-                    source={require('../../../../assets/images/qr_code.png')} 
-                    style={styles.qrImage}
-                    contentFit="contain" 
-                  />
+                  <>
+                    <Copy size={13} color="#FFFFFF" />
+                    <Text style={styles.copyBtnText}>Copy</Text>
+                  </>
                 )}
-                <View style={styles.qrFooterBadge}>
-                  <Text style={styles.qrFooterText}>Google Pay • PhonePe • Paytm • BHIM</Text>
-                </View>
-              </View>
+              </TouchableOpacity>
+            </View>
 
-              {paymentSettings?.instructions ? (
-                <View style={styles.instructionNote}>
-                  <Text style={styles.instructionTitle}>Admin Instructions:</Text>
+            {/* Dynamic QR Code Image (Clean & Centered) */}
+            <View style={styles.qrFrame}>
+              {activeQrUrl ? (
+                <Image 
+                  source={{ uri: activeQrUrl }} 
+                  style={styles.qrImage}
+                  contentFit="contain" 
+                />
+              ) : (
+                <Image 
+                  source={require('../../../../assets/images/qr_code.png')} 
+                  style={styles.qrImage}
+                  contentFit="contain" 
+                />
+              )}
+            </View>
+
+            {/* Styled Payment Apps Badges */}
+            <View style={styles.appBadgesRow}>
+              {['Google Pay', 'PhonePe', 'Paytm', 'BHIM UPI', 'Cred'].map((app) => (
+                <View key={app} style={styles.appBadgePill}>
+                  <Text style={styles.appBadgeText}>{app}</Text>
+                </View>
+              ))}
+            </View>
+
+            {paymentSettings?.instructions ? (
+              <View style={styles.instructionNote}>
+                <Info size={13} color="#0284C7" style={{ marginTop: 1, marginRight: 6 }} />
+                <View style={{ flex: 1 }}>
                   <Text style={styles.instructionBody}>{paymentSettings.instructions}</Text>
                 </View>
-              ) : null}
-            </View>
+              </View>
+            ) : null}
 
-            {/* Verification Form Card */}
+            {/* Action to proceed to Step 2 Form with Animated Glowing Border */}
+            <Animated.View
+              style={{
+                transform: [{ scale: animatedScale }],
+                borderRadius: 14,
+                borderWidth: 2,
+                borderColor: animatedBorderColor,
+                backgroundColor: '#00C853',
+                shadowColor: '#00C853',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.35,
+                shadowRadius: 8,
+                elevation: 5,
+                marginTop: 8,
+                marginBottom: 6,
+                overflow: 'hidden',
+              }}
+            >
+              <TouchableOpacity 
+                style={styles.proceedVerifyBtn} 
+                onPress={() => setPaymentStep('form')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.proceedVerifyBtnText}>I Have Paid • Enter Details</Text>
+                <ChevronRight size={18} color="#FFFFFF" strokeWidth={3} />
+              </TouchableOpacity>
+            </Animated.View>
+
+            <TouchableOpacity 
+              style={styles.whatsappHelpRow} 
+              onPress={openWhatsAppHelp}
+              activeOpacity={0.7}
+            >
+              <HelpCircle size={13} color="#00C853" />
+              <Text style={styles.whatsappHelpText}>Need help? Chat on WhatsApp</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        ) : (
+          /* ================= PAGE 3 (PART 2): FILL DETAILS & SUBMIT ================= */
+          <ScrollView contentContainerStyle={styles.detailsScroll} showsVerticalScrollIndicator={false}>
+            {/* Form Box - Compact & Premium */}
             <View style={styles.formCard}>
-              <View style={styles.formHeader}>
-                <Text style={styles.formMainTitle}>Enter Payment Verification</Text>
-                <Text style={styles.formMainSub}>
-                  After paying, submit your transaction details below for quick approval:
-                </Text>
+              <View style={styles.compactFormHeader}>
+                <View>
+                  <Text style={styles.compactFormTitle}>Submit Payment Verification</Text>
+                  <Text style={styles.compactFormSub}>Fast automatic course unlock</Text>
+                </View>
+                <View style={styles.compactPriceBadge}>
+                  <Text style={styles.compactPriceTextMain}>₹{finalPrice}</Text>
+                </View>
               </View>
 
               <View style={styles.inputGroup}>
@@ -799,7 +841,6 @@ export default function FolderExploreScreen() {
                   value={studentPhone}
                   onChangeText={setStudentPhone}
                 />
-                <Text style={styles.inputHint}>Access activation confirmation will be sent here.</Text>
               </View>
 
               <View style={styles.inputGroup}>
@@ -815,10 +856,10 @@ export default function FolderExploreScreen() {
                 />
               </View>
 
-              {/* UTR Input - Highlighted */}
-              <View style={[styles.inputGroup, styles.utrHighlightGroup]}>
+              {/* UTR Input - Compact Highlighted */}
+              <View style={styles.utrHighlightGroup}>
                 <View style={styles.utrLabelRow}>
-                  <Text style={styles.utrLabel}>12-Digit UTR / Transaction ID *</Text>
+                  <Text style={styles.utrLabel}>12-Digit UTR / Txn ID *</Text>
                   <View style={styles.mandatoryBadge}>
                     <Text style={styles.mandatoryText}>REQUIRED</Text>
                   </View>
@@ -833,43 +874,58 @@ export default function FolderExploreScreen() {
                   onChangeText={setTransactionId}
                 />
 
-                {/* Helper Callout for UTR */}
+                {/* Helper Callout for UTR (Compact 1-line) */}
                 <View style={styles.utrHelpBox}>
-                  <Text style={styles.utrHelpTitle}>💡 Where do I find the UTR / Transaction ID?</Text>
-                  <Text style={styles.utrHelpItem}>• <Text style={{ fontWeight: '700' }}>PhonePe:</Text> View payment history → Look for 12-digit 'UTR'</Text>
-                  <Text style={styles.utrHelpItem}>• <Text style={{ fontWeight: '700' }}>Google Pay:</Text> Tap transaction → 'UPI transaction ID'</Text>
-                  <Text style={styles.utrHelpItem}>• <Text style={{ fontWeight: '700' }}>Paytm:</Text> Transaction receipt → 'UPI Ref No.'</Text>
+                  <Text style={styles.utrHelpItem}>
+                    💡 <Text style={{ fontWeight: '700' }}>PhonePe</Text> (UTR) • <Text style={{ fontWeight: '700' }}>GPay</Text> (UPI Txn ID) • <Text style={{ fontWeight: '700' }}>Paytm</Text> (Ref No)
+                  </Text>
                 </View>
               </View>
 
-              {/* Submit Action */}
-              <TouchableOpacity 
-                style={[styles.mainSubmitBtn, submitting && { opacity: 0.7 }]} 
-                onPress={submitPayment}
-                disabled={submitting}
-                activeOpacity={0.85}
+              {/* Submit Action with Animated Glowing Border */}
+              <Animated.View
+                style={{
+                  transform: [{ scale: animatedScale }],
+                  borderRadius: 14,
+                  borderWidth: 2,
+                  borderColor: animatedBorderColor,
+                  backgroundColor: '#00C853',
+                  shadowColor: '#00C853',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.35,
+                  shadowRadius: 8,
+                  elevation: 5,
+                  overflow: 'hidden',
+                }}
               >
-                {submitting ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.mainSubmitBtnText}>Submitting Details...</Text>
-                  </View>
-                ) : (
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={styles.mainSubmitBtnText}>Verify Payment & Unlock Course</Text>
-                    <ChevronRight size={18} color="#FFFFFF" strokeWidth={3} style={{ marginLeft: 6 }} />
-                  </View>
-                )}
-              </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.mainSubmitBtn, submitting && { opacity: 0.7 }]} 
+                  onPress={submitPayment}
+                  disabled={submitting}
+                  activeOpacity={0.85}
+                >
+                  {submitting ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+                      <Text style={styles.mainSubmitBtnText}>Verifying Details...</Text>
+                    </View>
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <CheckCircle2 size={16} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 6 }} />
+                      <Text style={styles.mainSubmitBtnText}>Verify Payment & Unlock</Text>
+                      <ChevronRight size={16} color="#FFFFFF" strokeWidth={3} style={{ marginLeft: 4 }} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
 
-              {/* Back to Step 1 */}
               <TouchableOpacity 
                 style={styles.backToQrBtn} 
-                onPress={() => setPaymentStep('details')}
+                onPress={() => setPaymentStep('qr')}
                 activeOpacity={0.7}
               >
-                <ArrowLeft size={16} color="#64748B" style={{ marginRight: 6 }} />
-                <Text style={styles.backToQrText}>Back to Course Details</Text>
+                <ArrowLeft size={13} color="#64748B" style={{ marginRight: 4 }} />
+                <Text style={styles.backToQrText}>Back to QR Code</Text>
               </TouchableOpacity>
             </View>
 
@@ -879,8 +935,8 @@ export default function FolderExploreScreen() {
               onPress={openWhatsAppHelp}
               activeOpacity={0.7}
             >
-              <HelpCircle size={16} color="#059669" />
-              <Text style={styles.whatsappHelpText}>Having trouble or want to pay manually? Chat on WhatsApp</Text>
+              <HelpCircle size={13} color="#00C853" />
+              <Text style={styles.whatsappHelpText}>Need assistance? Chat on WhatsApp</Text>
             </TouchableOpacity>
           </ScrollView>
         )}
@@ -889,6 +945,7 @@ export default function FolderExploreScreen() {
   }
 
   // --- Normal Content Render (hasAccess = true) ---
+  const userOwnsCurrentFolder = hasAccess && folder.isPaid;
   const hasContent = 
     (folder.children && folder.children.length > 0) || 
     (folder.materials && folder.materials.length > 0) || 
@@ -944,6 +1001,7 @@ export default function FolderExploreScreen() {
                 ? Math.round(((child.price - child.discountPrice) / child.price) * 100)
                 : 0;
               const finalPrice = child.discountPrice || child.price || 0;
+              const isSubOwned = userOwnsCurrentFolder || purchasedFolderIds.includes(child.id);
 
               return (
                 <TouchableOpacity
@@ -974,7 +1032,7 @@ export default function FolderExploreScreen() {
                   {/* Right Side: Content */}
                   <View style={styles.cardContent}>
                     <View>
-                      <Text style={[styles.cardTitle, { fontSize: 15 }]} numberOfLines={2}>
+                      <Text style={styles.folderCardTitle} numberOfLines={2}>
                         {child.name}
                       </Text>
                       
@@ -997,22 +1055,29 @@ export default function FolderExploreScreen() {
                       </View>
                     </View>
 
-                    {/* Action Button Row */}
-                    <View style={{ marginTop: 'auto', flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 6 }}>
+                    {/* Action Button Row - Full Width Green & Compact Height */}
+                    <View style={{ marginTop: 'auto', paddingTop: 3 }}>
                       <View style={{ 
-                        backgroundColor: '#0072FF', 
-                        paddingHorizontal: 12, 
+                        backgroundColor: child.isPaid && !isSubOwned ? '#00C853' : '#D1FAE5', 
                         paddingVertical: 5, 
-                        borderRadius: 8,
-                        flexDirection: 'row',
+                        borderRadius: 6,
+                        width: '100%',
                         alignItems: 'center',
+                        justifyContent: 'center',
+                        shadowColor: child.isPaid && !isSubOwned ? '#00C853' : 'transparent',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.15,
+                        shadowRadius: 1.5,
+                        elevation: 1,
                       }}>
                         <Text style={{ 
-                          color: '#FFFFFF', 
-                          fontSize: 11, 
-                          fontWeight: '700' 
+                          color: child.isPaid && !isSubOwned ? '#FFFFFF' : '#047857', 
+                          fontSize: 11.5, 
+                          fontWeight: '900',
+                          textAlign: 'center',
+                          letterSpacing: 0.2,
                         }}>
-                          {child.isPaid ? 'Buy Course' : 'View Content'}
+                          {child.isPaid && !isSubOwned ? 'Buy Now' : 'Start Now'}
                         </Text>
                       </View>
                     </View>
@@ -1074,78 +1139,88 @@ export default function FolderExploreScreen() {
               <Text style={styles.sectionTitle}>Test Series & Mock Tests</Text>
               <Text style={styles.sectionCount}>{folder.testSeries.length} Series</Text>
             </View>
-            {folder.testSeries.map((ts: any) => (
-              <TouchableOpacity
-                key={ts.id}
-                style={styles.courseCard}
-                activeOpacity={0.82}
-                onPress={() => router.push(`/series/${ts.id}`)}
-              >
-                {/* Thumbnail */}
-                <View style={styles.thumbnailContainer}>
-                  {ts.thumbnail ? (
-                    <Image source={{ uri: ts.thumbnail }} style={styles.thumbnailImage} />
-                  ) : (
-                    <View style={styles.thumbnailPlaceholder}>
-                      <ShoppingCart size={24} color="#64748B" />
+            {folder.testSeries.map((ts: any) => {
+              const isFree = ts.isFree || ts.price === 0 || !ts.price;
+              const isAttemptCompleted =
+                ts.userAttemptsCount >= (ts.maxAttempts || 2) && ts.latestAttemptId;
+              const hasAttempts = ts.userAttemptsCount > 0;
+              const finalPrice = ts.discountPrice || ts.price;
+              const isSeriesOwned = userOwnsCurrentFolder || purchasedSeriesIds.includes(ts.id);
+
+              return (
+                <TouchableOpacity
+                  key={ts.id}
+                  style={styles.compactTestCard}
+                  activeOpacity={0.82}
+                  onPress={() => router.push(`/series/${ts.id}`)}
+                >
+                  {/* Left: Small Icon */}
+                  <View style={styles.compactTestIconBadge}>
+                    {ts.thumbnail ? (
+                      <Image source={{ uri: ts.thumbnail }} style={styles.compactTestIconImg} />
+                    ) : (
+                      <ClipboardCheck size={18} color="#00C853" strokeWidth={2.3} />
+                    )}
+                  </View>
+
+                  {/* Middle: Title & Inline Stats */}
+                  <View style={styles.compactTestInfo}>
+                    <View style={styles.compactTestTitleRow}>
+                      <Text style={styles.compactTestTitle} numberOfLines={1}>
+                        {ts.title}
+                      </Text>
+                      {isFree ? (
+                        <View style={styles.compactFreeBadge}>
+                          <Text style={styles.compactFreeText}>FREE</Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.compactPriceText}>₹{finalPrice}</Text>
+                      )}
                     </View>
-                  )}
-                </View>
 
-                {/* Content */}
-                <View style={styles.cardContent}>
-                  <Text style={[styles.cardTitle, { fontSize: 15 }]} numberOfLines={2}>
-                    {ts.title}
-                  </Text>
+                    <Text style={styles.compactStatsText} numberOfLines={1}>
+                      <Text style={{ color: '#008A38', fontWeight: '800' }}>{ts.totalQuestions || 0} Qs</Text>
+                      <Text style={{ color: '#CBD5E1' }}>  •  </Text>
+                      <Text>{ts.duration || 60}m</Text>
+                      <Text style={{ color: '#CBD5E1' }}>  •  </Text>
+                      <Text>{ts.totalMarks || 100} Marks</Text>
+                    </Text>
+                  </View>
 
-                  <View style={{ marginTop: 'auto', flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 6 }}>
-                    {ts.userAttemptsCount >= (ts.maxAttempts || 2) ? (
-                      <TouchableOpacity 
-                        onPress={(e) => { 
-                          e.stopPropagation(); 
+                  {/* Right: Same-Line Action Button */}
+                  <View style={styles.compactBtnWrapper}>
+                    {isAttemptCompleted ? (
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
                           if (ts.firstTestId && ts.latestAttemptId) {
-                            router.push(`/test/${ts.firstTestId}?viewMode=review&attemptId=${ts.latestAttemptId}`);
+                            router.push(
+                              `/test/${ts.firstTestId}?viewMode=review&attemptId=${ts.latestAttemptId}`
+                            );
                           }
                         }}
-                        style={{ 
-                          backgroundColor: '#D1FAE5', 
-                          paddingHorizontal: 12, 
-                          paddingVertical: 5, 
-                          borderRadius: 8,
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                        }}
+                        style={styles.compactBtnDone}
                       >
-                        <Text style={{ color: '#059669', fontSize: 11, fontWeight: '700', marginRight: 4 }}>
-                          Attempt Completed
-                        </Text>
-                        <CheckCircle2 size={14} color="#059669" />
+                        <Text style={styles.compactBtnDoneText}>View Result</Text>
+                        <CheckCircle2 size={11} color="#059669" />
                       </TouchableOpacity>
+                    ) : hasAttempts ? (
+                      <View style={styles.compactBtnReattempt}>
+                        <Text style={styles.compactBtnReattemptText}>Re-Attempt</Text>
+                        <ChevronRight size={11} color="#0072FF" />
+                      </View>
                     ) : (
-                      <View style={{ 
-                        backgroundColor: '#EFF6FF', 
-                        paddingHorizontal: 12, 
-                        paddingVertical: 5, 
-                        borderRadius: 8,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                      }}>
-                        <Text style={{ 
-                          color: '#0072FF', 
-                          fontSize: 11, 
-                          fontWeight: '700' 
-                        }}>
-                          {ts.userAttemptsCount > 0 
-                            ? `Re-Attempt (${(ts.maxAttempts || 2) - ts.userAttemptsCount} left)` 
-                            : `Attempt Test 1/${ts.maxAttempts || 2}`}
+                      <View style={!isFree && !isSeriesOwned ? styles.compactBtnStart : styles.compactBtnReattempt}>
+                        <Text style={!isFree && !isSeriesOwned ? styles.compactBtnStartText : styles.compactBtnReattemptText}>
+                          {!isFree && !isSeriesOwned ? 'Buy' : 'Start Test'}
                         </Text>
-                        <ChevronRight size={14} color="#0072FF" style={{ marginLeft: 4 }} />
+                        <ChevronRight size={11} color={!isFree && !isSeriesOwned ? "#FFFFFF" : "#0072FF"} />
                       </View>
                     )}
                   </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
@@ -1245,12 +1320,136 @@ const styles = StyleSheet.create({
   openPdfPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF1F2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
   openPdfPillText: { fontSize: 12, fontWeight: '700', color: '#E11D48', marginRight: 2 },
 
+  compactTestCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  compactTestIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  compactTestIconImg: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 9,
+  },
+  compactTestInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  compactTestTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  compactTestTitle: {
+    flexShrink: 1,
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  compactFreeBadge: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  compactFreeText: {
+    fontSize: 8.5,
+    fontWeight: '900',
+    color: '#00C853',
+  },
+  compactPriceText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  compactStatsText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  compactBtnWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactBtnDone: {
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  compactBtnDoneText: {
+    color: '#059669',
+    fontSize: 10.5,
+    fontWeight: '800',
+  },
+  compactBtnReattempt: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  compactBtnReattemptText: {
+    color: '#0072FF',
+    fontSize: 10.5,
+    fontWeight: '800',
+  },
+  compactBtnStart: {
+    backgroundColor: '#00C853',
+    paddingHorizontal: 11,
+    paddingVertical: 5.5,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    shadowColor: '#00C853',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  compactBtnStartText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+
   courseCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'stretch',
-    marginBottom: 12,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     shadowColor: '#000',
@@ -1258,12 +1457,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 2,
     elevation: 1,
-    padding: 8,
-    gap: 12,
+    padding: 7,
+    gap: 10,
   },
   thumbnailContainer: {
-    width: 145,
-    height: 95,
+    width: 140,
+    height: 92,
     backgroundColor: '#F1F5F9',
     borderRadius: 8,
     overflow: 'hidden',
@@ -1290,42 +1489,48 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.7)',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderBottomRightRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderBottomRightRadius: 7,
   },
   newBadgeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#4ADE80',
-    marginRight: 4,
+    marginRight: 3,
   },
   newBadgeText: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '700',
   },
   cardContent: {
     flex: 1,
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: 1,
   },
-
+  folderCardTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+    lineHeight: 16,
+    marginBottom: 2,
+  },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 4,
+    gap: 5,
+    marginBottom: 2,
   },
   finalPrice: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
     color: '#0F172A',
   },
   originalPrice: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#94A3B8',
     textDecorationLine: 'line-through',
@@ -1334,13 +1539,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     borderWidth: 1,
     borderColor: '#FECACA',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    marginLeft: 2,
   },
   cardDiscountText: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '700',
     color: '#EF4444',
   },
@@ -1354,300 +1559,226 @@ const styles = StyleSheet.create({
 
   // 2-Page Scroll Views
   detailsScroll: {
-    padding: 16,
-    paddingBottom: 130,
+    padding: 14,
+    paddingBottom: 85,
   },
   paymentScroll: {
-    padding: 16,
-    paddingBottom: 40,
+    padding: 14,
+    paddingBottom: 85,
   },
 
-  detailsWhatsappRow: {
+  // Seamless Main Screen Styles
+  mainBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  mainPackageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 20,
+    gap: 4,
+  },
+  mainPackageBadgeText: {
+    color: '#00C853',
+    fontSize: 10.5,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  mainValidityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  mainValidityBadgeText: {
+    color: '#475569',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  mainScreenTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#0F172A',
+    lineHeight: 30,
+    marginBottom: 6,
+  },
+  mainScreenDesc: {
+    fontSize: 12.5,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  mainPriceBox: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1.5,
+    borderColor: '#BBF7D0',
+    borderRadius: 18,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  mainPriceLabel: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    color: '#008A38',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  mainPriceFigures: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
+  mainFinalPrice: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#006027',
+  },
+  mainOriginalPrice: {
+    fontSize: 15,
+    color: '#94A3B8',
+    textDecorationLine: 'line-through',
+  },
+  mainDiscountBadge: {
+    backgroundColor: '#00C853',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+  },
+  mainDiscountText: {
+    color: '#FFFFFF',
+    fontSize: 10.5,
+    fontWeight: '900',
+  },
+  mainSyllabusTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  mainSyllabusTagText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#008A38',
+  },
+  mainPayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    gap: 6,
+  },
+  mainPayBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  mainTrustRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    marginBottom: 20,
+  },
+  mainTrustText: {
+    color: '#008A38',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  // Main Features
+  mainFeaturesSection: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    marginBottom: 16,
+  },
+  mainFeaturesSectionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#334155',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 14,
+  },
+  mainFeaturesGrid: {
+    gap: 12,
+  },
+  mainFeatureItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  mainFeatureIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  mainFeatureTextWrap: {
+    flex: 1,
+  },
+  mainFeatureName: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  mainFeatureSub: {
+    fontSize: 11.5,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+
+  mainWhatsappBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    marginBottom: 16,
-  },
-  detailsWhatsappText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#059669',
-    marginLeft: 6,
-    textDecorationLine: 'underline',
-  },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 22,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  bottomPriceCol: {
-    justifyContent: 'center',
-  },
-  bottomPriceLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#64748B',
-    letterSpacing: 0.5,
-  },
-  bottomFinalPrice: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#0072FF',
-    marginRight: 6,
-  },
-  bottomOriginalPrice: {
-    fontSize: 14,
-    color: '#94A3B8',
-    textDecorationLine: 'line-through',
-  },
-  continuePaymentBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0072FF',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
     borderRadius: 14,
-    shadowColor: '#0072FF',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  continuePaymentBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-    marginRight: 6,
-  },
-
-  // Premium Hero Card
-  heroCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#1E293B',
-  },
-  heroBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  premiumPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-  },
-  premiumPillText: {
-    color: '#FBBF24',
-    fontSize: 11,
-    fontWeight: '800',
-    marginLeft: 5,
-    letterSpacing: 0.5,
-  },
-  lockedPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  lockedPillText: {
-    color: '#94A3B8',
-    fontSize: 10,
-    fontWeight: '700',
-    marginLeft: 4,
-    letterSpacing: 0.5,
-  },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    lineHeight: 28,
-    marginBottom: 8,
-  },
-  heroDesc: {
-    fontSize: 13,
-    color: '#94A3B8',
-    lineHeight: 19,
-    marginBottom: 16,
-  },
-  heroPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    marginBottom: 12,
-  },
-  heroPriceLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#34D399',
-    letterSpacing: 0.8,
-    marginBottom: 4,
-  },
-  priceFigures: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  heroPriceFinal: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    marginRight: 8,
-  },
-  heroPriceOriginal: {
-    fontSize: 16,
-    color: '#64748B',
-    textDecorationLine: 'line-through',
-    marginRight: 8,
-  },
-  discountPill: {
-    backgroundColor: '#059669',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  discountPillText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  validityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  validityBadgeText: {
-    color: '#065F46',
-    fontSize: 12,
-    fontWeight: '700',
-    marginLeft: 5,
-  },
-  heroSecurityNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  heroSecurityText: {
-    color: '#6EE7B7',
-    fontSize: 11,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-
-  // Features Card (What you get)
-  featuresCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
+    gap: 6,
+    marginBottom: 10,
   },
-  featuresHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  featuresIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#EEF2FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  featuresTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  featuresSub: {
+  mainWhatsappText: {
     fontSize: 12,
-    color: '#64748B',
-    marginTop: 1,
-  },
-  featureList: {
-    gap: 12,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  featureBullet: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    marginTop: 2,
-  },
-  featureTextCol: {
-    flex: 1,
-  },
-  featureHeading: {
-    fontSize: 14,
     fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  featureDetail: {
-    fontSize: 12,
-    color: '#64748B',
-    lineHeight: 17,
+    color: '#059669',
   },
 
   // Payment Box (QR & UPI)
   paymentBox: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
@@ -1655,31 +1786,40 @@ const styles = StyleSheet.create({
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 2,
   },
-  paymentBoxHeader: {
-    marginBottom: 14,
+  stepBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
   },
-  paymentBoxTitle: {
-    fontSize: 17,
+  stepPill: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  stepPillText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#00C853',
+    letterSpacing: 0.5,
+  },
+  stepHeading: {
+    fontSize: 16,
     fontWeight: '800',
     color: '#0F172A',
-    marginBottom: 2,
   },
   paymentBoxSub: {
     fontSize: 12,
     color: '#64748B',
+    marginBottom: 14,
+    marginTop: 2,
   },
   scannerSelectorContainer: {
-    marginBottom: 12,
-  },
-  scannerSelectorLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748B',
-    marginBottom: 6,
-    textTransform: 'uppercase',
+    marginBottom: 14,
   },
   qrTabsContainer: {
     flexDirection: 'row',
@@ -1694,8 +1834,8 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   qrTabButtonActive: {
-    backgroundColor: '#4F46E5',
-    borderColor: '#4F46E5',
+    backgroundColor: '#00C853',
+    borderColor: '#00C853',
   },
   qrTabText: {
     fontSize: 12,
@@ -1713,7 +1853,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     marginBottom: 14,
   },
   upiInfo: {
@@ -1721,7 +1861,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   upiTag: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
     color: '#64748B',
     letterSpacing: 0.5,
@@ -1735,75 +1875,91 @@ const styles = StyleSheet.create({
   copyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#00C853',
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
+    paddingVertical: 8,
+    borderRadius: 10,
+    shadowColor: '#00C853',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
   },
   copyBtnSuccess: {
-    backgroundColor: '#059669',
-    borderColor: '#059669',
+    backgroundColor: '#00A844',
   },
   copyBtnText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#4F46E5',
+    fontWeight: '800',
+    color: '#FFFFFF',
     marginLeft: 4,
   },
   copyBtnTextSuccess: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#FFFFFF',
     marginLeft: 4,
   },
   qrFrame: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 12,
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#A7F3D0',
+    marginBottom: 10,
+    alignSelf: 'center',
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
   qrImage: {
-    width: 220,
-    height: 220,
+    width: 230,
+    height: 230,
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
   },
-  qrFooterBadge: {
-    marginTop: 10,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
+  appBadgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  appBadgePill: {
+    backgroundColor: '#F1F5F9',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  qrFooterText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#64748B',
+  appBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#475569',
   },
   instructionNote: {
-    backgroundColor: '#FEF3C7',
+    flexDirection: 'row',
+    backgroundColor: '#F0F9FF',
     padding: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FDE68A',
+    borderColor: '#BAE6FD',
   },
   instructionTitle: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#92400E',
+    color: '#0369A1',
     marginBottom: 2,
   },
   instructionBody: {
     fontSize: 12,
-    color: '#78350F',
+    color: '#0284C7',
     lineHeight: 16,
   },
 
@@ -1849,14 +2005,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0072FF',
     paddingVertical: 14,
-    borderRadius: 14,
-    shadowColor: '#0072FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    paddingHorizontal: 18,
+    gap: 6,
   },
   proceedVerifyBtnText: {
     color: '#FFFFFF',
@@ -1869,12 +2020,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   whatsappHelpText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#047857',
+    fontWeight: '700',
+    color: '#00C853',
     marginLeft: 6,
     textDecorationLine: 'underline',
   },
@@ -1883,56 +2034,76 @@ const styles = StyleSheet.create({
   stepTwoWrapper: {
     width: '100%',
   },
-  recapBanner: {
+  // Compact Price Header for Step 2 and 3
+  compactPriceHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#EEF2FF',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-    marginBottom: 16,
-  },
-  recapLeft: {
-    flex: 1,
-    marginRight: 10,
-  },
-  recapLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#4338CA',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  recapTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1E1B4B',
-  },
-  recapPrice: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#059669',
-    marginTop: 2,
-  },
-  recapChangeBtn: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 10,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: '#E2E8F0',
+    marginBottom: 10,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  recapChangeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#4F46E5',
+  compactPriceLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginRight: 8,
+  },
+  compactPriceCourseName: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  compactPriceBadge: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  compactPriceTextMain: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#008A38',
+  },
+
+  // Compact Form Styles
+  compactFormHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  compactFormTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  compactFormSub: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+    marginTop: 1,
   },
   formCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 18,
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     shadowColor: '#0F172A',
@@ -1940,135 +2111,121 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
-  },
-  formHeader: {
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  formMainTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   formMainSub: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#64748B',
-    lineHeight: 18,
+    lineHeight: 15,
+    marginBottom: 10,
   },
   inputGroup: {
-    marginBottom: 14,
+    marginBottom: 10,
   },
   inputLabel: {
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: '700',
     color: '#334155',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   inputField: {
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 13,
     color: '#0F172A',
   },
   inputHint: {
-    fontSize: 11,
+    fontSize: 9.5,
     color: '#64748B',
-    marginTop: 4,
+    marginTop: 2,
   },
   utrHighlightGroup: {
-    backgroundColor: '#F8FAFC',
-    padding: 14,
-    borderRadius: 14,
+    backgroundColor: '#F0FDF4',
+    padding: 10,
+    borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#818CF8',
-    marginBottom: 18,
+    borderColor: '#86EFAC',
+    marginBottom: 12,
   },
   utrLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   utrLabel: {
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: '800',
-    color: '#1E1B4B',
+    color: '#065F46',
   },
   mandatoryBadge: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#DCFCE7',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 4,
   },
   mandatoryText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#4F46E5',
+    fontSize: 8.5,
+    fontWeight: '900',
+    color: '#008A38',
   },
   utrInputField: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#4F46E5',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
+    borderColor: '#00C853',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 14,
     fontWeight: '800',
     color: '#0F172A',
-    letterSpacing: 1,
-    marginBottom: 10,
+    letterSpacing: 0.5,
+    marginBottom: 6,
   },
   utrHelpBox: {
-    backgroundColor: '#EEF2FF',
-    padding: 10,
-    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    padding: 6,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#E0E7FF',
+    borderColor: '#DCFCE7',
   },
   utrHelpTitle: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: '800',
-    color: '#3730A3',
-    marginBottom: 4,
+    color: '#065F46',
+    marginBottom: 2,
   },
   utrHelpItem: {
-    fontSize: 11,
-    color: '#4338CA',
-    lineHeight: 16,
+    fontSize: 9.5,
+    color: '#047857',
+    lineHeight: 14,
   },
   mainSubmitBtn: {
-    backgroundColor: '#4F46E5',
-    paddingVertical: 15,
-    borderRadius: 14,
+    backgroundColor: '#00C853',
+    paddingVertical: 12,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
-    marginBottom: 12,
+    flexDirection: 'row',
   },
   mainSubmitBtnText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 13.5,
     fontWeight: '800',
   },
   backToQrBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 6,
+    marginTop: 6,
   },
   backToQrText: {
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: '700',
     color: '#64748B',
   },

@@ -61,7 +61,7 @@ export default function MobileTestAttemptScreen() {
 
   // UI state
   const [timeLeft, setTimeLeft] = useState(120 * 60);
-  const [language, setLanguage] = useState<'HI' | 'EN'>('EN');
+  const [language, setLanguage] = useState<'HI' | 'EN'>('HI');
   const [fontSizeScale, setFontSizeScale] = useState<number>(1); // 1x, 1.18x, 1.35x
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);

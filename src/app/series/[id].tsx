@@ -1,7 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, StatusBar, Platform, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  StatusBar,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { PlayCircle, Clock, FileText, CheckCircle, ShieldAlert, ArrowLeft, ShoppingCart, Award, ChevronRight, Languages, CheckCircle2, RotateCcw } from 'lucide-react-native';
+import {
+  PlayCircle,
+  Clock,
+  FileText,
+  ArrowLeft,
+  Award,
+  Sparkles,
+  Zap,
+  Languages,
+  TrendingUp,
+  BookOpen,
+} from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getApiBaseUrl, fetchUserAttempts, getCachedData, setCachedData } from '../../services/api';
 
@@ -12,16 +31,16 @@ export default function SeriesDetailScreen() {
   const [tests, setTests] = useState<any[]>([]);
   const [userAttempts, setUserAttempts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
   const [globalMaxAttempts, setGlobalMaxAttempts] = useState<number>(3);
 
   useEffect(() => {
     const initInstantData = async () => {
-      // 1. Instant Cache Load (0ms click render)
+      // 1. Instant Cache Load
       try {
         const [cachedAllSeries, cachedTests] = await Promise.all([
           getCachedData<any[]>('test_series'),
-          getCachedData<any[]>(`series_tests_${id}`)
+          getCachedData<any[]>(`series_tests_${id}`),
         ]);
 
         if (cachedAllSeries && Array.isArray(cachedAllSeries)) {
@@ -39,7 +58,7 @@ export default function SeriesDetailScreen() {
         // Fallback to network
       }
 
-      // 2. Background fresh fetch (silently updates data)
+      // 2. Background fresh fetch
       try {
         const [sRes, tRes, userAttData, setRes] = await Promise.all([
           fetch(`${getApiBaseUrl()}/test-series`).catch(() => null),
@@ -67,9 +86,9 @@ export default function SeriesDetailScreen() {
         if (tRes && tRes.ok) {
           const tList = await tRes.json();
           if (Array.isArray(tList)) {
-            const formatted = tList.map(t => ({
+            const formatted = tList.map((t) => ({
               ...t,
-              maxAttempts: t.maxAttempts !== undefined ? t.maxAttempts : currentGlobalMax
+              maxAttempts: t.maxAttempts !== undefined ? t.maxAttempts : currentGlobalMax,
             }));
             setTests(formatted);
             setCachedData(`series_tests_${id}`, formatted);
@@ -94,7 +113,7 @@ export default function SeriesDetailScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#0072FF" />
+        <ActivityIndicator size="large" color="#00C853" />
       </View>
     );
   }
@@ -115,319 +134,479 @@ export default function SeriesDetailScreen() {
     );
   }
 
-  const isFree = series.isFree || series.price === 0 || !series.price;
+  const activeTest = tests.find((t) => t.id === selectedTestId) || tests[0];
+  const matchingAttempts = userAttempts.filter(
+    (a: any) => a.testId === activeTest?.id || a.test?.id === activeTest?.id
+  );
+  const completedAttempts = matchingAttempts.filter((a: any) => a.status === 'SUBMITTED');
+  const attemptCount = completedAttempts.length;
+  const maxAttempts =
+    activeTest?.maxAttempts !== undefined ? activeTest.maxAttempts : globalMaxAttempts;
+  const isExhausted = maxAttempts > 0 && attemptCount >= maxAttempts;
+  const latestCompletedAttemptId = completedAttempts[0]?.id;
 
-  const handleStartTest = (testId: string) => {
-    const test = tests.find((t) => t.id === testId);
-    const matchingAttempts = userAttempts.filter((a: any) => a.testId === testId || a.test?.id === testId);
-    const completedAttempts = matchingAttempts.filter((a: any) => a.status === 'SUBMITTED');
-    const maxAttempts = test?.maxAttempts !== undefined ? test.maxAttempts : globalMaxAttempts;
-
-    if (maxAttempts > 0 && completedAttempts.length >= maxAttempts) {
-      const latestCompletedAttemptId = completedAttempts.length > 0 ? completedAttempts[0].id : null;
-      
-      Alert.alert(
-        'Attempts Exhausted',
-        `You have already completed all ${maxAttempts}/${maxAttempts} allowed attempts for this test. You can view your scorecard and full solutions.`,
-        [
-          {
-            text: 'View Result & Solutions',
-            onPress: () => {
-              if (latestCompletedAttemptId) router.push(`/test/${testId}?viewMode=review&attemptId=${latestCompletedAttemptId}`);
-            },
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
+  const handleStartActiveTest = () => {
+    if (!activeTest) return;
+    if (isExhausted) {
+      if (latestCompletedAttemptId) {
+        router.push(
+          `/test/${activeTest.id}?viewMode=review&attemptId=${latestCompletedAttemptId}`
+        );
+      }
       return;
     }
-
-    router.push(`/test/${testId}`);
+    router.push(`/test/${activeTest.id}`);
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0072FF" />
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-        {/* Hero Header */}
-        <View style={styles.heroHeader}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.heroBackBtn} activeOpacity={0.7}>
-            <ArrowLeft color="#FFFFFF" size={24} />
-          </TouchableOpacity>
-          <Text style={styles.categoryBadge}>TEST SERIES</Text>
-          <Text style={styles.heroTitle}>{series.title}</Text>
-          <Text style={styles.heroSubText}>Choose an exam paper below and review instructions to begin.</Text>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      {/* Top Header */}
+      <View style={styles.topNavBar}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          activeOpacity={0.7}
+        >
+          <ArrowLeft size={18} color="#1E293B" />
+          <Text style={styles.backBtnText}>Back</Text>
+        </TouchableOpacity>
+
+        <View style={styles.mockBadge}>
+          <Sparkles size={12} color="#00C853" style={{ marginRight: 4 }} />
+          <Text style={styles.mockBadgeText}>MOCK TEST</Text>
         </View>
+      </View>
 
-        {/* Tests List Section */}
-        <View style={styles.contentSection}>
-          <Text style={styles.sectionHeading}>Select Exam Paper ({tests.length})</Text>
-          
-          {tests.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <FileText size={36} color="#CBD5E1" style={{ marginBottom: 8 }} />
-              <Text style={styles.emptyTitle}>No exam papers available</Text>
-              <Text style={styles.emptySubtitle}>Papers will appear here once published by admin.</Text>
-            </View>
-          ) : (
-            <View style={styles.testList}>
-              {tests.map((test, index) => {
-                const testAttempts = userAttempts.filter((a: any) => a.testId === test.id || a.test?.id === test.id);
-                const completedAttempts = testAttempts.filter((a: any) => a.status === 'SUBMITTED');
-                const attemptCount = completedAttempts.length;
-                const maxAttempts = test.maxAttempts !== undefined ? test.maxAttempts : globalMaxAttempts;
-                const isExhausted = maxAttempts > 0 && attemptCount >= maxAttempts;
-                
-                const latestCompletedAttemptId = completedAttempts.length > 0 ? completedAttempts[0].id : null;
-
-                return (
-                  <TouchableOpacity
-                    key={test.id}
-                    style={[styles.testCard, isExhausted && styles.testCardExhausted]}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      if (isExhausted && latestCompletedAttemptId) {
-                        router.push(`/test/${test.id}?viewMode=review&attemptId=${latestCompletedAttemptId}`);
-                      } else {
-                        handleStartTest(test.id);
-                      }
-                    }}
-                  >
-                    <View style={styles.testCardHeader}>
-                      {isExhausted ? (
-                        <View style={[styles.testBadge, styles.testBadgeExhausted]}>
-                          <CheckCircle2 size={11} color="#DC2626" />
-                          <Text style={styles.testBadgeTextExhausted}>{maxAttempts}/{maxAttempts} Attempts Completed</Text>
-                        </View>
-                      ) : attemptCount > 0 ? (
-                        <View style={[styles.testBadge, styles.testBadgePartial]}>
-                          <RotateCcw size={11} color="#0072FF" />
-                          <Text style={styles.testBadgeTextPartial}>
-                            {maxAttempts === 0 ? `Attempt ${attemptCount} Done (Unlimited)` : `Attempt ${attemptCount}/${maxAttempts} Done`}
-                          </Text>
-                        </View>
-                      ) : (
-                        <View style={styles.testBadge}>
-                          <Text style={styles.testBadgeText}>
-                            PAPER {test.testNumber || index + 1} • {maxAttempts === 0 ? 'Unlimited Attempts' : `${maxAttempts} Attempts`}
-                          </Text>
-                        </View>
-                      )}
-
-                      <View style={styles.testMeta}>
-                        <Clock size={12} color="#64748B" />
-                        <Text style={styles.testMetaText}>{test.duration || 120} Mins</Text>
-                        <Text style={styles.testMetaDot}>•</Text>
-                        <Award size={12} color="#64748B" />
-                        <Text style={styles.testMetaText}>{test.totalMarks || 100} Marks</Text>
-                      </View>
-                    </View>
-
-                    <Text style={styles.testTitle}>{test.title}</Text>
-
-                    <View style={styles.testFooter}>
-                      <Text style={styles.testQCount}>{test.totalQuestions || 0} Questions</Text>
-                      
-                      {isExhausted ? (
-                        <TouchableOpacity
-                          style={styles.viewResultBtnPill}
-                          onPress={() => {
-                            if (latestCompletedAttemptId) router.push(`/test/${test.id}?viewMode=review&attemptId=${latestCompletedAttemptId}`);
-                          }}
-                        >
-                          <Text style={styles.viewResultBtnPillText}>View Result & Solutions</Text>
-                          <ChevronRight size={14} color="#0072FF" />
-                        </TouchableOpacity>
-                      ) : attemptCount > 0 ? (
-                        <View style={styles.attemptActionGroup}>
-                          {latestCompletedAttemptId && (
-                            <TouchableOpacity
-                              onPress={() => router.push(`/test/${test.id}?viewMode=review&attemptId=${latestCompletedAttemptId}`)}
-                              style={styles.prevResultLink}
-                            >
-                              <Text style={styles.prevResultLinkText}>Last Result</Text>
-                            </TouchableOpacity>
-                          )}
-                          <TouchableOpacity
-                            style={styles.startBtnPill}
-                            onPress={() => handleStartTest(test.id)}
-                          >
-                            <Text style={styles.startBtnPillText}>
-                              {maxAttempts === 0 ? 'Re-Attempt (Unlimited)' : `Re-Attempt (${maxAttempts - attemptCount} left)`}
-                            </Text>
-                            <PlayCircle size={14} color="#0072FF" />
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <View style={styles.startBtnPill}>
-                          <Text style={styles.startBtnPillText}>Start Paper</Text>
-                          <PlayCircle size={14} color="#0072FF" />
-                        </View>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-
-          {/* Series Instructions */}
-          {/* Series Instructions */}
-          <View style={styles.instructionCard}>
-            <View style={styles.instructionHeader}>
-              <View style={styles.instructionHeaderLeft}>
-                <ShieldAlert size={20} color="#0072FF" />
-                <Text style={styles.instructionTitle}>Exam Instructions & Guidelines</Text>
-              </View>
-              <View style={styles.bilingualTag}>
-                <Languages size={12} color="#0072FF" />
-                <Text style={styles.bilingualTagText}>English / Hindi</Text>
-              </View>
-            </View>
-
-            {/* 1. Marking Scheme Grid */}
-            <Text style={styles.instSubHeading}>MARKING SCHEME (PER QUESTION)</Text>
-            <View style={styles.markingSchemeRow}>
-              <View style={[styles.markingTile, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
-                <Text style={[styles.markingTileVal, { color: '#16A34A' }]}>+ Correct</Text>
-                <Text style={styles.markingTileLabel}>Full Marks</Text>
-              </View>
-              <View style={[styles.markingTile, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
-                <Text style={[styles.markingTileVal, { color: '#DC2626' }]}>- Negative</Text>
-                <Text style={styles.markingTileLabel}>Wrong Answer</Text>
-              </View>
-              <View style={[styles.markingTile, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }]}>
-                <Text style={[styles.markingTileVal, { color: '#64748B' }]}>0 Marks</Text>
-                <Text style={styles.markingTileLabel}>Unattempted</Text>
-              </View>
-            </View>
-
-            {/* 2. Question Status / Palette Legend */}
-            <Text style={styles.instSubHeading}>QUESTION PALETTE & STATUS SYMBOLS</Text>
-            <View style={styles.paletteGrid}>
-              <View style={styles.paletteRowItem}>
-                <View style={[styles.statusSquare, { backgroundColor: '#10B981' }]}>
-                  <Text style={styles.statusSquareText}>01</Text>
-                </View>
-                <View style={styles.statusInfo}>
-                  <Text style={styles.statusInfoTitle}>Answered</Text>
-                  <Text style={styles.statusInfoDesc}>Option selected and recorded</Text>
-                </View>
-              </View>
-
-              <View style={styles.paletteRowItem}>
-                <View style={[styles.statusSquare, { backgroundColor: '#EF4444' }]}>
-                  <Text style={styles.statusSquareText}>02</Text>
-                </View>
-                <View style={styles.statusInfo}>
-                  <Text style={styles.statusInfoTitle}>Not Answered</Text>
-                  <Text style={styles.statusInfoDesc}>Question viewed but no option chosen</Text>
-                </View>
-              </View>
-
-              <View style={styles.paletteRowItem}>
-                <View style={[styles.statusSquare, { backgroundColor: '#8B5CF6' }]}>
-                  <Text style={styles.statusSquareText}>03</Text>
-                </View>
-                <View style={styles.statusInfo}>
-                  <Text style={styles.statusInfoTitle}>Marked for Review</Text>
-                  <Text style={styles.statusInfoDesc}>Flagged to revisit before final submit</Text>
-                </View>
-              </View>
-
-              <View style={styles.paletteRowItem}>
-                <View style={[styles.statusSquare, { backgroundColor: '#E2E8F0' }]}>
-                  <Text style={[styles.statusSquareText, { color: '#475569' }]}>04</Text>
-                </View>
-                <View style={styles.statusInfo}>
-                  <Text style={styles.statusInfoTitle}>Not Visited / Skipped</Text>
-                  <Text style={styles.statusInfoDesc}>Question has not been opened yet</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* 3. General Guidelines */}
-            <Text style={styles.instSubHeading}>GENERAL GUIDELINES</Text>
-            <View style={styles.guidelineList}>
-              <View style={styles.instructionItem}>
-                <View style={styles.bulletDot} />
-                <Text style={styles.instructionText}>Real exam timer will begin immediately upon starting. Auto-submits at 00:00.</Text>
-              </View>
-              <View style={styles.instructionItem}>
-                <View style={styles.bulletDot} />
-                <Text style={styles.instructionText}>Switch between English & Hindi or jump between sections at any time during the test.</Text>
-              </View>
-              <View style={styles.instructionItem}>
-                <View style={styles.bulletDot} />
-                <Text style={styles.instructionText}>Instant All Jharkhand Rank, Percentile, and step-by-step solutions right after submission.</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
-
-      {/* Sticky Bottom Action */}
-      {tests.length > 0 && (() => {
-        const firstTestAttempts = userAttempts.filter((a: any) => a.testId === tests[0].id || a.test?.id === tests[0].id);
-        const firstCompletedAttempts = firstTestAttempts.filter((a: any) => a.status === 'SUBMITTED');
-        const firstAttemptCount = firstCompletedAttempts.length;
-        const firstMaxAttempts = tests[0].maxAttempts !== undefined ? tests[0].maxAttempts : globalMaxAttempts;
-        const firstExhausted = firstMaxAttempts > 0 && firstAttemptCount >= firstMaxAttempts;
-        const firstLatestCompletedAttemptId = firstCompletedAttempts[0]?.id;
-
-        if (firstExhausted) {
-          return (
-            <View style={styles.footer}>
-              <TouchableOpacity
-                style={styles.startButton}
-                activeOpacity={0.85}
-                onPress={() => {
-                  if (firstLatestCompletedAttemptId) {
-                    router.push(`/test/${tests[0].id}?viewMode=review&attemptId=${firstLatestCompletedAttemptId}`);
-                  } else {
-                    Alert.alert('Attempts Completed', 'You have completed all attempts for this test.');
-                  }
-                }}
-              >
-                <Text style={styles.startButtonText}>
-                  View {tests[0].title || 'Paper'} Results & Solutions
-                </Text>
-                <ChevronRight size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          );
-        }
-
-        return (
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={styles.startButton}
-              activeOpacity={0.85}
-              onPress={() => handleStartTest(tests[0].id)}
-            >
-              <Text style={styles.startButtonText}>
-                {firstAttemptCount > 0 ? `Re-Attempt ${tests[0].title || 'Paper'}` : `Start ${tests[0].title || 'Paper'}`}
-              </Text>
-              <PlayCircle size={20} color="#FFFFFF" />
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Empty State */}
+        {tests.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <FileText size={40} color="#CBD5E1" style={{ marginBottom: 10 }} />
+            <Text style={styles.emptyTitle}>No Exam Papers Available</Text>
+            <TouchableOpacity onPress={() => router.back()} style={styles.emptyBackBtn}>
+              <Text style={styles.emptyBackBtnText}>Go Back</Text>
             </TouchableOpacity>
           </View>
-        );
-      })()}
-    </View>
+        ) : (
+          <>
+            {/* Multi-Paper Tabs if Multiple Papers */}
+            {tests.length > 1 && (
+              <View style={styles.paperTabsContainer}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.paperTabsList}
+                >
+                  {tests.map((t, idx) => {
+                    const isSelected = activeTest?.id === t.id;
+                    return (
+                      <TouchableOpacity
+                        key={t.id}
+                        onPress={() => setSelectedTestId(t.id)}
+                        style={[
+                          styles.paperTab,
+                          isSelected && styles.paperTabSelected,
+                        ]}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.paperTabText,
+                            isSelected && styles.paperTabTextSelected,
+                          ]}
+                        >
+                          Paper {t.testNumber || idx + 1}: {t.title}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Clean Test Title (Single Title - Not Written Twice) */}
+            <View style={styles.titleSection}>
+              <Text style={styles.testMainTitle}>
+                {activeTest?.title || series?.title || 'Mock Test'}
+              </Text>
+            </View>
+
+            {/* 3 Simple Green Stat Cards Matching Brand Logo (#00C853) */}
+            <View style={styles.statsRow}>
+              {/* Questions */}
+              <View style={styles.statBox}>
+                <View style={styles.statIconBox}>
+                  <FileText size={18} color="#FFFFFF" />
+                </View>
+                <Text style={styles.statNum}>{activeTest?.totalQuestions || 0}</Text>
+                <Text style={styles.statLabel}>QUESTIONS</Text>
+              </View>
+
+              {/* Duration */}
+              <View style={styles.statBox}>
+                <View style={styles.statIconBox}>
+                  <Clock size={18} color="#FFFFFF" />
+                </View>
+                <Text style={styles.statNum}>{activeTest?.duration || 60}</Text>
+                <Text style={styles.statLabel}>MINUTES</Text>
+              </View>
+
+              {/* Marks */}
+              <View style={styles.statBox}>
+                <View style={styles.statIconBox}>
+                  <Award size={18} color="#FFFFFF" />
+                </View>
+                <Text style={styles.statNum}>{activeTest?.totalMarks || 100}</Text>
+                <Text style={styles.statLabel}>TOTAL MARKS</Text>
+              </View>
+            </View>
+
+            {/* 4 Feature Pills */}
+            <View style={styles.featuresGrid}>
+              <View style={styles.featurePill}>
+                <Zap size={14} color="#00C853" style={{ marginRight: 6 }} />
+                <Text style={styles.featurePillText}>Instant Scorecard</Text>
+              </View>
+              <View style={styles.featurePill}>
+                <Languages size={14} color="#00C853" style={{ marginRight: 6 }} />
+                <Text style={styles.featurePillText}>English / Hindi</Text>
+              </View>
+              <View style={styles.featurePill}>
+                <TrendingUp size={14} color="#00C853" style={{ marginRight: 6 }} />
+                <Text style={styles.featurePillText}>Rank & Analysis</Text>
+              </View>
+              <View style={styles.featurePill}>
+                <BookOpen size={14} color="#00C853" style={{ marginRight: 6 }} />
+                <Text style={styles.featurePillText}>Step Solutions</Text>
+              </View>
+            </View>
+
+            {/* Attempts Info Box */}
+            <View style={styles.attemptInfoBox}>
+              <View
+                style={[
+                  styles.attemptIconBox,
+                  { backgroundColor: isExhausted ? '#FEE2E2' : '#ECFDF5' },
+                ]}
+              >
+                <Sparkles size={16} color={isExhausted ? '#DC2626' : '#00C853'} />
+              </View>
+              <View style={styles.attemptTextWrap}>
+                <Text style={styles.attemptMainTitle}>
+                  {isExhausted
+                    ? `All ${maxAttempts} Attempts Completed`
+                    : attemptCount > 0
+                    ? `Attempt ${attemptCount + 1} of ${maxAttempts}`
+                    : `${maxAttempts > 0 ? `${maxAttempts} Attempts Allowed` : 'Unlimited Attempts'}`}
+                </Text>
+                <Text style={styles.attemptSubTitle}>
+                  {isExhausted
+                    ? 'Review full scorecard and step-by-step solutions.'
+                    : 'Timer begins immediately once started.'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Action Buttons - Directly After Attempts Box */}
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={styles.actionBackBtn}
+                onPress={() => router.back()}
+                activeOpacity={0.8}
+              >
+                <ArrowLeft size={16} color="#334155" />
+                <Text style={styles.actionBackBtnText}>Back</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionStartBtn,
+                  isExhausted && !latestCompletedAttemptId && styles.actionDisabledBtn,
+                ]}
+                onPress={handleStartActiveTest}
+                activeOpacity={0.85}
+              >
+                <PlayCircle size={19} color="#FFFFFF" />
+                <Text style={styles.actionStartBtnText}>
+                  {isExhausted
+                    ? 'View Result'
+                    : attemptCount > 0
+                    ? 'Re-Attempt Test'
+                    : 'Start Test'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     padding: 20,
   },
-  container: {
-    flex: 1,
+  topNavBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
     backgroundColor: '#F8FAFC',
+  },
+  backBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  mockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+  },
+  mockBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#00C853',
+    letterSpacing: 0.8,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingTop: 16,
+    paddingBottom: 30,
+    gap: 16,
+  },
+  paperTabsContainer: {
+    marginBottom: 4,
+  },
+  paperTabsList: {
+    gap: 8,
+  },
+  paperTab: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  paperTabSelected: {
+    backgroundColor: '#00C853',
+  },
+  paperTabText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  paperTabTextSelected: {
+    color: '#FFFFFF',
+  },
+  titleSection: {
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  testMainTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#0F172A',
+    textAlign: 'center',
+    lineHeight: 34,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 200, 83, 0.4)',
+    borderRadius: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+  },
+  statIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#00C853',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statNum: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#006027',
+    lineHeight: 28,
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#008A38',
+    textTransform: 'uppercase',
+    marginTop: 4,
+    letterSpacing: 0.6,
+  },
+  featuresGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 2,
+  },
+  featurePill: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+  },
+  featurePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  attemptInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 12,
+  },
+  attemptIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attemptTextWrap: {
+    flex: 1,
+  },
+  attemptMainTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  attemptSubTitle: {
+    fontSize: 10.5,
+    fontWeight: '500',
+    color: '#64748B',
+    marginTop: 1,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  actionBackBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  actionBackBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#334155',
+  },
+  actionStartBtn: {
+    flex: 2,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: '#00C853',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#00C853',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  actionStartBtnText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  actionDisabledBtn: {
+    backgroundColor: '#94A3B8',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  emptyBackBtn: {
+    marginTop: 14,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  emptyBackBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
   },
   headerSimple: {
     flexDirection: 'row',
@@ -442,382 +621,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0F172A',
     marginLeft: 12,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  heroHeader: {
-    backgroundColor: '#0072FF',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ? StatusBar.currentHeight + 12 : 36) : 48,
-    paddingBottom: 28,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  heroBackBtn: {
-    padding: 6,
-    marginLeft: -6,
-    marginBottom: 8,
-    alignSelf: 'flex-start',
-  },
-  categoryBadge: {
-    color: '#BFDBFE',
-    fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 4,
-  },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    marginBottom: 6,
-  },
-  heroSubText: {
-    fontSize: 13,
-    color: '#DBEAFE',
-    fontWeight: '500',
-    lineHeight: 18,
-  },
-  contentSection: {
-    paddingHorizontal: 16,
-    marginTop: 18,
-    marginBottom: 20,
-  },
-  sectionHeading: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1E293B',
-    marginBottom: 12,
-  },
-  emptyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  emptySubtitle: {
-    fontSize: 12,
-    color: '#94A3B8',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  testList: {
-    gap: 12,
-    marginBottom: 20,
-  },
-  testCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0072FF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  testCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  testBadge: {
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  testBadgeText: {
-    color: '#0072FF',
-    fontWeight: '800',
-    fontSize: 10,
-  },
-  testBadgeExhausted: {
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  testBadgeTextExhausted: {
-    color: '#DC2626',
-    fontWeight: '800',
-    fontSize: 10,
-  },
-  testBadgePartial: {
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  testBadgeTextPartial: {
-    color: '#0072FF',
-    fontWeight: '800',
-    fontSize: 10,
-  },
-  testCardExhausted: {
-    borderColor: '#E2E8F0',
-  },
-  viewResultBtnPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#0072FF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  viewResultBtnPillText: {
-    color: '#0072FF',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  attemptActionGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  prevResultLink: {
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-  },
-  prevResultLinkText: {
-    fontSize: 11,
-    color: '#64748B',
-    fontWeight: '700',
-    textDecorationLine: 'underline',
-  },
-  testMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  testMetaText: {
-    fontSize: 11,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  testMetaDot: {
-    color: '#CBD5E1',
-    fontSize: 12,
-  },
-  testTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 12,
-  },
-  testFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    paddingTop: 10,
-  },
-  testQCount: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  startBtnPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  startBtnPillText: {
-    color: '#0072FF',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  instructionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0072FF',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  instructionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    paddingBottom: 12,
-  },
-  instructionHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  instructionTitle: {
-    fontSize: 14.5,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  bilingualTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-  },
-  bilingualTagText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#0072FF',
-  },
-  instSubHeading: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#64748B',
-    letterSpacing: 0.6,
-    marginBottom: 8,
-    marginTop: 10,
-  },
-  markingSchemeRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
-  },
-  markingTile: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  markingTileVal: {
-    fontSize: 13,
-    fontWeight: '900',
-    marginBottom: 2,
-  },
-  markingTileLabel: {
-    fontSize: 10,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  paletteGrid: {
-    gap: 8,
-    marginBottom: 14,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 14,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  paletteRowItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  statusSquare: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusSquareText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  statusInfo: {
-    flex: 1,
-  },
-  statusInfoTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#1E293B',
-  },
-  statusInfoDesc: {
-    fontSize: 10.5,
-    color: '#64748B',
-    fontWeight: '500',
-    marginTop: 1,
-  },
-  guidelineList: {
-    gap: 4,
-    marginTop: 4,
-  },
-  instructionItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  bulletDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#0072FF',
-    marginTop: 6,
-    marginRight: 8,
-  },
-  instructionText: {
-    fontSize: 12,
-    color: '#475569',
-    flex: 1,
-    lineHeight: 18,
-  },
-  footer: {
-    padding: 14,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-  },
-  startButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0072FF',
-    paddingVertical: 14,
-    borderRadius: 14,
-    shadowColor: '#0072FF',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
-    gap: 8,
-  },
-  startButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
   },
 });

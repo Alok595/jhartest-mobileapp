@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Dimensions,
   StatusBar,
+  Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -124,6 +125,17 @@ export default function HomeScreen() {
     }
   };
 
+  const handlePressUrl = (url?: string) => {
+    if (!url) return;
+    const trimmed = url.trim();
+    if (/^(https?:\/\/|youtube\.com|youtu\.be|www\.)/i.test(trimmed)) {
+      const fullUrl = /^(https?:\/\/)/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+      Linking.openURL(fullUrl).catch((err) => console.error('Failed to open URL:', err));
+    } else {
+      router.push(trimmed as any);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
@@ -167,7 +179,7 @@ export default function HomeScreen() {
               key={banner.id}
               activeOpacity={0.9}
               style={[styles.bannerCard, { backgroundColor: banner.color || '#0F172A' }]}
-              onPress={() => banner.buttonUrl ? router.push(banner.buttonUrl as any) : null}
+              onPress={() => handlePressUrl(banner.buttonUrl)}
             >
               <Image 
                 source={{ uri: banner.imageUrl || banner.image }} 
@@ -200,7 +212,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={styles.actionCard}
                 activeOpacity={0.82}
-                onPress={() => action.url ? router.push(action.url as any) : null}
+                onPress={() => handlePressUrl(action.url)}
               >
                 <View style={[styles.actionIconBox, { backgroundColor: action.bgColor || '#F1F5F9' }]}>
                   {renderIcon(action.icon, action.iconColor || action.color || '#0072FF')}
