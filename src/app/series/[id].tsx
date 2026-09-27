@@ -23,6 +23,7 @@ import {
   TrendingUp,
   BookOpen,
   RotateCw,
+  ClipboardCheck,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getApiBaseUrl, fetchUserAttempts, getCachedData, setCachedData, prefetchMultipleTests } from '../../services/api';
@@ -279,8 +280,11 @@ export default function SeriesDetailScreen() {
         {/* Empty State */}
         {tests.length === 0 ? (
           <View style={styles.emptyCard}>
-            <FileText size={40} color="#CBD5E1" style={{ marginBottom: 10 }} />
-            <Text style={styles.emptyTitle}>No Exam Papers Available</Text>
+            <FileText size={40} color="#0072FF" style={{ marginBottom: 10 }} />
+            <Text style={styles.emptyTitle}>Coming Soon 🚀</Text>
+            <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 4, marginBottom: 16 }}>
+              Questions and test papers for this series are being prepared.
+            </Text>
             <TouchableOpacity onPress={() => router.back()} style={styles.emptyBackBtn}>
               <Text style={styles.emptyBackBtnText}>Go Back</Text>
             </TouchableOpacity>
@@ -387,7 +391,7 @@ export default function SeriesDetailScreen() {
                   { backgroundColor: isExhausted ? '#FEE2E2' : '#ECFDF5' },
                 ]}
               >
-                <Sparkles size={16} color={isExhausted ? '#DC2626' : '#00C853'} />
+                <ClipboardCheck size={16} color={isExhausted ? '#DC2626' : '#00C853'} />
               </View>
               <View style={styles.attemptTextWrap}>
                 <Text style={styles.attemptMainTitle}>

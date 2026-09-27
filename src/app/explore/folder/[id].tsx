@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking, Alert, TextInput, Platform, Animated, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking, Alert, TextInput, Platform, Animated, RefreshControl, Vibration } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { 
   Folder, 
   FileText, 
@@ -29,7 +31,8 @@ import {
   User,
   Mail,
   CreditCard,
-  QrCode
+  QrCode,
+  PlayCircle
 } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Clipboard from 'expo-clipboard';
@@ -545,18 +548,14 @@ export default function FolderExploreScreen() {
     );
   }
 
-  // --- Payment Form / Lock Screen ---
-  if (!hasAccess && (accessReason === 'NO_ORDER' || accessReason === 'EXPIRED')) {
+  // --- Payment Step Screen (QR / Form) ---
+  if (paymentStep === 'qr' || paymentStep === 'form') {
     const finalPrice = folder.discountPrice || folder.price || 0;
     const originalPrice = folder.price || finalPrice;
     const isDiscounted = folder.discountPrice && folder.discountPrice < folder.price;
     const discountPercent = isDiscounted 
       ? Math.round(((originalPrice - finalPrice) / originalPrice) * 100) 
       : 0;
-
-    const testsCount = folder.testSeries?.length || 0;
-    const materialsCount = folder.materials?.length || 0;
-    const subfoldersCount = folder.children?.length || 0;
 
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -566,8 +565,7 @@ export default function FolderExploreScreen() {
             style={styles.backBtn} 
             onPress={() => {
               if (paymentStep === 'form') setPaymentStep('qr');
-              else if (paymentStep === 'qr') setPaymentStep('details');
-              else router.back();
+              else setPaymentStep('details');
             }} 
             activeOpacity={0.7}
           >
@@ -576,9 +574,7 @@ export default function FolderExploreScreen() {
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle} numberOfLines={1}>{folder.name}</Text>
             <Text style={styles.headerSub}>
-              {paymentStep === 'details' 
-                ? 'Course Overview' 
-                : paymentStep === 'qr'
+              {paymentStep === 'qr'
                 ? 'Part 1: Scan & Pay via UPI'
                 : 'Part 2: Submit Verification Details'}
             </Text>
@@ -605,154 +601,7 @@ export default function FolderExploreScreen() {
           </View>
         </View>
 
-        {paymentStep === 'details' ? (
-          /* ================= PAGE 1: COURSE OVERVIEW ================= */
-          <ScrollView
-            contentContainerStyle={styles.detailsScroll}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={handleRefreshStatus} colors={['#0072FF']} />
-            }
-          >
-            {/* Top Badges */}
-            <View style={styles.mainBadgeRow}>
-              <View style={styles.mainPackageBadge}>
-                <Sparkles size={12} color="#00C853" />
-                <Text style={styles.mainPackageBadgeText}>PREMIUM PACKAGE</Text>
-              </View>
-              <View style={styles.mainValidityBadge}>
-                <Clock size={12} color="#00C853" />
-                <Text style={styles.mainValidityBadgeText}>
-                  {folder.validity ? `${folder.validity} Days Access` : '365 Days Access'}
-                </Text>
-              </View>
-            </View>
-
-            {/* Title & Description */}
-            <Text style={styles.mainScreenTitle}>{folder.name}</Text>
-            
-            <Text style={styles.mainScreenDesc}>
-              {folder.description ||
-                'Complete preparation package with full mock tests, high-yield PDF revision notes, and chapter-wise learning modules.'}
-            </Text>
-
-            {/* Special Offer Price Box */}
-            <View style={styles.mainPriceBox}>
-              <View>
-                <Text style={styles.mainPriceLabel}>SPECIAL OFFER PRICE</Text>
-                <View style={styles.mainPriceFigures}>
-                  <Text style={styles.mainFinalPrice}>₹{finalPrice}</Text>
-                  {isDiscounted && (
-                    <Text style={styles.mainOriginalPrice}>₹{folder.price}</Text>
-                  )}
-                  {isDiscounted && (
-                    <View style={styles.mainDiscountBadge}>
-                      <Text style={styles.mainDiscountText}>{discountPercent}% OFF</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              <View style={styles.mainSyllabusTag}>
-                <ShieldCheck size={13} color="#008A38" />
-                <Text style={styles.mainSyllabusTagText}>Full Syllabus</Text>
-              </View>
-            </View>
-
-            {/* Primary Action Button with Animated Glowing Border */}
-            <Animated.View
-              style={{
-                transform: [{ scale: animatedScale }],
-                borderRadius: 16,
-                borderWidth: 2,
-                borderColor: animatedBorderColor,
-                backgroundColor: '#00C853',
-                shadowColor: '#00C853',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.35,
-                shadowRadius: 8,
-                elevation: 5,
-                marginBottom: 10,
-                overflow: 'hidden',
-              }}
-            >
-              <TouchableOpacity
-                style={styles.mainPayBtn}
-                onPress={() => setPaymentStep('qr')}
-                activeOpacity={0.88}
-              >
-                <Text style={styles.mainPayBtnText}>Continue to Payment (₹{finalPrice})</Text>
-                <ChevronRight size={20} color="#FFFFFF" strokeWidth={3} />
-              </TouchableOpacity>
-            </Animated.View>
-
-            <View style={styles.mainTrustRow}>
-              <CheckCircle2 size={13} color="#00C853" />
-              <Text style={styles.mainTrustText}>Instant Activation • 100% Verified Exam Syllabus</Text>
-            </View>
-
-            {/* 4 Clean Feature Items */}
-            <View style={styles.mainFeaturesSection}>
-              <Text style={styles.mainFeaturesSectionTitle}>Included in this package</Text>
-
-              <View style={styles.mainFeaturesGrid}>
-                {/* 1. Rank & Analytics */}
-                <View style={styles.mainFeatureItem}>
-                  <View style={styles.mainFeatureIconWrap}>
-                    <TrendingUp size={16} color="#00C853" />
-                  </View>
-                  <View style={styles.mainFeatureTextWrap}>
-                    <Text style={styles.mainFeatureName}>Rank & Analytics</Text>
-                    <Text style={styles.mainFeatureSub}>State-level rank, percentile & speed analysis</Text>
-                  </View>
-                </View>
-
-                {/* 2. Detailed Report Card */}
-                <View style={styles.mainFeatureItem}>
-                  <View style={styles.mainFeatureIconWrap}>
-                    <Award size={16} color="#00C853" />
-                  </View>
-                  <View style={styles.mainFeatureTextWrap}>
-                    <Text style={styles.mainFeatureName}>Instant Report Card</Text>
-                    <Text style={styles.mainFeatureSub}>Accuracy, score breakdown & question time metrics</Text>
-                  </View>
-                </View>
-
-                {/* 3. Question Analysis with Solutions */}
-                <View style={styles.mainFeatureItem}>
-                  <View style={styles.mainFeatureIconWrap}>
-                    <BookOpen size={16} color="#00C853" />
-                  </View>
-                  <View style={styles.mainFeatureTextWrap}>
-                    <Text style={styles.mainFeatureName}>Question Analysis with Solutions</Text>
-                    <Text style={styles.mainFeatureSub}>Step-by-step explanations for every question</Text>
-                  </View>
-                </View>
-
-                {/* 4. Based on Exam Pattern */}
-                <View style={styles.mainFeatureItem}>
-                  <View style={styles.mainFeatureIconWrap}>
-                    <CheckCircle2 size={16} color="#00C853" />
-                  </View>
-                  <View style={styles.mainFeatureTextWrap}>
-                    <Text style={styles.mainFeatureName}>Based on Exam Pattern</Text>
-                    <Text style={styles.mainFeatureSub}>Strictly designed as per latest official syllabus & marking scheme</Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* Direct WhatsApp Help */}
-            <TouchableOpacity 
-              style={styles.mainWhatsappBtn} 
-              onPress={openWhatsAppHelp}
-              activeOpacity={0.7}
-            >
-              <HelpCircle size={15} color="#059669" />
-              <Text style={styles.mainWhatsappText}>Have questions before enrolling? Chat on WhatsApp</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        ) : paymentStep === 'qr' ? (
+        {paymentStep === 'qr' ? (
           /* ================= PAGE 2 (PART 1): SCAN & PAY VIA UPI ================= */
           <ScrollView contentContainerStyle={styles.detailsScroll} showsVerticalScrollIndicator={false}>
             {/* Price & Status Header */}
@@ -1004,49 +853,56 @@ export default function FolderExploreScreen() {
     );
   }
 
-  // --- Normal Content Render (hasAccess = true) ---
+  // --- Normal Main Content Render (Shows all test series & materials) ---
   const userOwnsCurrentFolder = hasAccess && folder.isPaid;
   const hasContent = 
-    (folder.children && folder.children.length > 0) || 
     (folder.materials && folder.materials.length > 0) || 
     (folder.testSeries && folder.testSeries.length > 0);
+
+  const folderFinalPrice = folder.discountPrice || folder.price || 0;
+  const folderOriginalPrice = folder.price || folderFinalPrice;
+  const folderDiscount =
+    folder.price && folder.discountPrice && folder.price > folder.discountPrice
+      ? Math.round(((folder.price - folder.discountPrice) / folder.price) * 100)
+      : 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       {/* Top Navigation Bar */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-          <ArrowLeft size={22} color="#0F172A" />
-        </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {folder.name}
-          </Text>
-          <Text style={styles.headerSub}>Explore Content Catalog</Text>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+            <ArrowLeft size={21} color="#002D72" />
+          </TouchableOpacity>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {folder.name}
+            </Text>
+            <Text style={styles.headerSub}>
+              {hasAccess ? 'Enrolled Content' : 'Course Packages & Tests'}
+            </Text>
+          </View>
         </View>
-        <TouchableOpacity
-          onPress={handleRefreshStatus}
-          style={styles.helpIconBtn}
-          activeOpacity={0.75}
-          disabled={refreshing}
-        >
-          <Animated.View style={{ transform: [{ rotate: spin }] }}>
-            <RotateCw size={19} color="#0072FF" />
-          </Animated.View>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <TouchableOpacity
+            onPress={handleRefreshStatus}
+            style={styles.helpIconBtn}
+            activeOpacity={0.75}
+            disabled={refreshing}
+          >
+            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+              <RotateCw size={19} color="#0072FF" />
+            </Animated.View>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={openWhatsAppHelp} 
+            style={styles.helpIconBtn}
+            activeOpacity={0.75}
+          >
+            <HelpCircle size={20} color="#059669" />
+          </TouchableOpacity>
+        </View>
       </View>
-
-      {folder.isPaid && (
-        <View style={styles.enrolledBanner}>
-          <View style={styles.enrolledBadgeIcon}>
-            <CheckCircle2 size={16} color="#059669" />
-          </View>
-          <View>
-            <Text style={styles.enrolledText}>Enrolled & Active</Text>
-            <Text style={styles.enrolledSub}>You have full access to all items in this folder</Text>
-          </View>
-        </View>
-      )}
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -1055,207 +911,203 @@ export default function FolderExploreScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefreshStatus} colors={['#0072FF']} />
         }
       >
+        {/* If user has purchased: Enrolled Badge */}
+        {folder.isPaid && hasAccess && (
+          <View style={styles.enrolledBanner}>
+            <View style={styles.enrolledBadgeIcon}>
+              <CheckCircle2 size={16} color="#059669" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.enrolledText}>Enrolled & Active</Text>
+              <Text style={styles.enrolledSub}>You have full access to all test series & materials</Text>
+            </View>
+          </View>
+        )}
+
+        {/* If folder is paid and user hasn't purchased: Hero Buy Banner with 3D Blue Glass Card */}
+        {folder.isPaid && !hasAccess && (
+          <View style={styles.heroBuyCardWrapper}>
+            <View style={styles.heroBuyCardBorder}>
+              <BlurView intensity={35} tint="light" style={styles.heroBuyCardBlur}>
+                <LinearGradient
+                  colors={[
+                    'rgba(255, 255, 255, 0.95)',
+                    'rgba(238, 246, 255, 0.75)',
+                    'rgba(224, 238, 255, 0.55)',
+                  ]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.heroBuyCardGlassOverlay}
+                >
+                  <View style={styles.cardGlossHighlight} />
+
+                  <View style={styles.heroBuyTopRow}>
+                    <View style={styles.heroBadgePill}>
+                      <Sparkles size={12} color="#002D72" />
+                      <Text style={styles.heroBadgeText}>FULL COURSE ACCESS</Text>
+                    </View>
+                    <View style={styles.heroValidityBadge}>
+                      <Clock size={12} color="#64748B" />
+                      <Text style={styles.heroValidityText}>
+                        {folder.validity ? `${folder.validity} Days` : '365 Days Access'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.heroTitle}>{folder.name}</Text>
+                  {folder.description ? (
+                    <Text style={styles.heroDesc} numberOfLines={2}>{folder.description}</Text>
+                  ) : null}
+
+                  {/* Price & Buy Now Button */}
+                  <View style={styles.heroPriceRow}>
+                    <View>
+                      <Text style={styles.heroPriceLabel}>SPECIAL OFFER PRICE</Text>
+                      <View style={styles.heroPriceFigures}>
+                        <Text style={styles.heroFinalPrice}>₹{folderFinalPrice}</Text>
+                        {folderOriginalPrice > folderFinalPrice && (
+                          <Text style={styles.heroOriginalPrice}>₹{folderOriginalPrice}</Text>
+                        )}
+                        {folderDiscount > 0 && (
+                          <View style={styles.heroDiscountBadge}>
+                            <Text style={styles.heroDiscountText}>{folderDiscount}% OFF</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* 3D Animated Buy Now Button */}
+                  <Animated.View style={{ transform: [{ scale: animatedScale }], marginTop: 10 }}>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={handleProceedToPayment}
+                      style={styles.heroBuyBtnBorder}
+                    >
+                      <BlurView intensity={45} tint="light" style={styles.heroBuyBtnBlur}>
+                        <LinearGradient
+                          colors={['#002D72', '#001A44']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.heroBuyBtnGradient}
+                        >
+                          <View style={styles.heroBuyBtnInner}>
+                            <View style={styles.heroBuyIconPill}>
+                              <Sparkles color="#F59E0B" size={16} />
+                            </View>
+                            <Text style={styles.heroBuyBtnText}>
+                              Buy Now • Unlock All (₹{folderFinalPrice})
+                            </Text>
+                            <View style={styles.heroBuyArrowPill}>
+                              <ChevronRight color="#F59E0B" size={16} />
+                            </View>
+                          </View>
+                        </LinearGradient>
+                      </BlurView>
+                    </TouchableOpacity>
+                  </Animated.View>
+
+                  <View style={styles.heroTrustRow}>
+                    <CheckCircle2 size={12} color="#059669" />
+                    <Text style={styles.heroTrustText}>
+                      Instant Activation • Demo Tests Free • All Jharkhand Rank
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </BlurView>
+            </View>
+          </View>
+        )}
+
+        {/* Empty State */}
         {!hasContent && (
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconCircle}>
-              <Folder size={40} color="#94A3B8" />
+              <Folder size={40} color="#002D72" />
             </View>
-            <Text style={styles.emptyTitle}>Folder is Empty</Text>
-            <Text style={styles.emptyText}>There are no materials or test series uploaded in this section yet.</Text>
+            <Text style={styles.emptyTitle}>Coming Soon 🚀</Text>
+            <Text style={styles.emptyText}>New study materials, mock tests, and notes for this section are being prepared.</Text>
           </View>
         )}
 
-        {/* Sub-Folders & Packages */}
-        {folder.children && folder.children.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Folders & Packages</Text>
-              <Text style={styles.sectionCount}>{folder.children.length} Items</Text>
-            </View>
-            {folder.children.map((child: any) => {
-              const discountPercent = child.price && child.discountPrice && child.price > child.discountPrice
-                ? Math.round(((child.price - child.discountPrice) / child.price) * 100)
-                : 0;
-              const finalPrice = child.discountPrice || child.price || 0;
-              const isSubOwned = userOwnsCurrentFolder || purchasedFolderIds.includes(child.id);
-
-              return (
-                <TouchableOpacity
-                  key={child.id}
-                  style={styles.courseCard}
-                  activeOpacity={0.82}
-                  onPress={() => router.push(`/explore/folder/${child.id}`)}
-                >
-                  {/* Left Side: Thumbnail with New Badge */}
-                  <View style={styles.thumbnailContainer}>
-                    {child.image ? (
-                      <Image source={{ uri: child.image }} style={styles.thumbnailImage} />
-                    ) : (
-                      <View style={styles.thumbnailPlaceholder}>
-                        {child.isPaid ? (
-                          <ShoppingCart size={28} color="#059669" />
-                        ) : (
-                          <Folder size={28} color="#0284C7" />
-                        )}
-                      </View>
-                    )}
-                    <View style={styles.newBadge}>
-                      <View style={styles.newBadgeDot} />
-                      <Text style={styles.newBadgeText}>New</Text>
-                    </View>
-                  </View>
-
-                  {/* Right Side: Content */}
-                  <View style={styles.cardContent}>
-                    <View>
-                      <Text style={styles.folderCardTitle} numberOfLines={2}>
-                        {child.name}
-                      </Text>
-                      
-                      <View style={styles.priceRow}>
-                        {child.isPaid && (
-                          <>
-                            <Text style={styles.finalPrice}>
-                              ₹ {finalPrice}
-                            </Text>
-                            {child.price && child.discountPrice && (
-                              <Text style={styles.originalPrice}>₹ {child.price}</Text>
-                            )}
-                            {discountPercent > 0 && (
-                              <View style={styles.cardDiscountPill}>
-                                <Text style={styles.cardDiscountText}>{discountPercent}% off</Text>
-                              </View>
-                            )}
-                          </>
-                        )}
-                      </View>
-                    </View>
-
-                    {/* Action Button Row - Full Width Green & Compact Height */}
-                    <View style={{ marginTop: 'auto', paddingTop: 3 }}>
-                      <View style={{ 
-                        backgroundColor: child.isPaid && !isSubOwned ? '#00C853' : '#D1FAE5', 
-                        paddingVertical: 5, 
-                        borderRadius: 6,
-                        width: '100%',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        shadowColor: child.isPaid && !isSubOwned ? '#00C853' : 'transparent',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.15,
-                        shadowRadius: 1.5,
-                        elevation: 1,
-                      }}>
-                        <Text style={{ 
-                          color: child.isPaid && !isSubOwned ? '#FFFFFF' : '#047857', 
-                          fontSize: 11.5, 
-                          fontWeight: '900',
-                          textAlign: 'center',
-                          letterSpacing: 0.2,
-                        }}>
-                          {child.isPaid && !isSubOwned ? 'Buy Now' : 'Start Now'}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Materials (PDFs / Docs) */}
-        {folder.materials && folder.materials.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Reading Materials & PDFs</Text>
-              <Text style={styles.sectionCount}>{folder.materials.length} Docs</Text>
-            </View>
-            {folder.materials.map((mat: any) => (
-              <TouchableOpacity
-                key={mat.id}
-                style={styles.card}
-                activeOpacity={0.8}
-                onPress={async () => {
-                  if (mat.pdfUrl) {
-                    try {
-                      await WebBrowser.openBrowserAsync(mat.pdfUrl);
-                    } catch (e) {
-                      Linking.openURL(mat.pdfUrl).catch(() => {
-                        Alert.alert('Error', 'Unable to open PDF link.');
-                      });
-                    }
-                  } else {
-                    Alert.alert('Notice', 'No PDF attached to this material.');
-                  }
-                }}
-              >
-                <View style={[styles.iconBox, { backgroundColor: '#FFF1F2' }]}>
-                  <FileText size={24} color="#E11D48" />
-                </View>
-                <View style={styles.cardInfo}>
-                  <Text style={styles.cardTitle} numberOfLines={1}>{mat.title}</Text>
-                  <Text style={styles.cardSubtitle}>
-                    {mat.type ? `${mat.type} • ` : ''}{mat.isFree ? 'Free Access Document' : 'Premium Document'}
-                  </Text>
-                </View>
-                <View style={styles.openPdfPill}>
-                  <Text style={styles.openPdfPillText}>Read</Text>
-                  <ChevronRight size={14} color="#E11D48" />
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {/* Test Series */}
+        {/* Test Series & Mock Tests */}
         {folder.testSeries && folder.testSeries.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Test Series & Mock Tests</Text>
               <Text style={styles.sectionCount}>{folder.testSeries.length} Series</Text>
             </View>
-            {folder.testSeries.map((ts: any) => {
-              const isFree = ts.isFree || ts.price === 0 || !ts.price;
+
+            {[...folder.testSeries].sort((a: any, b: any) => {
+              const aIsDemo = Boolean(a.isDemo || a.isFree || (a.title && a.title.toLowerCase().includes('demo')));
+              const bIsDemo = Boolean(b.isDemo || b.isFree || (b.title && b.title.toLowerCase().includes('demo')));
+              if (aIsDemo && !bIsDemo) return 1;
+              if (!aIsDemo && bIsDemo) return -1;
+              return 0;
+            }).map((ts: any) => {
+              const isDemo = Boolean(ts.isDemo || ts.isFree || (ts.title && ts.title.toLowerCase().includes('demo')));
+              const isUnlocked = hasAccess || isDemo || purchasedSeriesIds.includes(ts.id);
               const isAttemptCompleted =
                 ts.userAttemptsCount >= (ts.maxAttempts || 2) && ts.latestAttemptId;
               const hasAttempts = ts.userAttemptsCount > 0;
               const finalPrice = ts.discountPrice || ts.price;
-              const isSeriesOwned = userOwnsCurrentFolder || purchasedSeriesIds.includes(ts.id);
 
               return (
                 <TouchableOpacity
                   key={ts.id}
-                  style={styles.compactTestCard}
+                  style={[
+                    styles.compactTestCard,
+                    !isUnlocked && styles.compactTestCardLocked,
+                  ]}
                   activeOpacity={0.82}
-                  onPress={() => router.push(`/series/${ts.id}`)}
+                  onPress={() => {
+                    if (isUnlocked) {
+                      router.push(`/series/${ts.id}`);
+                    } else {
+                      Vibration.vibrate(50);
+                      Alert.alert(
+                        'Locked Test Series',
+                        `"${ts.title}" is a premium test series.\n\nUnlock the full package (₹${folderFinalPrice}) to start taking all tests with live rankings & detailed solutions.`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: `Buy Now (₹${folderFinalPrice})`, onPress: handleProceedToPayment },
+                        ]
+                      );
+                    }
+                  }}
                 >
-                  {/* Left: Small Icon */}
-                  <View style={styles.compactTestIconBadge}>
+                  {/* Left: Icon or Thumbnail */}
+                  <View style={[
+                    styles.compactTestIconBadge,
+                    !isUnlocked && { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' },
+                  ]}>
                     {ts.thumbnail ? (
                       <Image source={{ uri: ts.thumbnail }} style={styles.compactTestIconImg} />
+                    ) : !isUnlocked ? (
+                      <Lock size={18} color="#002D72" strokeWidth={2.3} />
+                    ) : isDemo ? (
+                      <FileText size={18} color="#002D72" strokeWidth={2.3} />
                     ) : (
-                      <ClipboardCheck size={18} color="#00C853" strokeWidth={2.3} />
+                      <ClipboardCheck size={18} color="#002D72" strokeWidth={2.3} />
                     )}
                   </View>
 
-                  {/* Middle: Title & Inline Stats */}
+                  {/* Middle: Title, Inline Badges & Stats */}
                   <View style={styles.compactTestInfo}>
                     <View style={styles.compactTestTitleRow}>
                       <Text style={styles.compactTestTitle} numberOfLines={1}>
                         {ts.title}
                       </Text>
-                      {isFree ? (
-                        <View style={styles.compactFreeBadge}>
-                          <Text style={styles.compactFreeText}>FREE</Text>
+                      {!isUnlocked && (
+                        <View style={styles.compactLockedBadge}>
+                          <Lock size={9} color="#64748B" style={{ marginRight: 2 }} />
+                          <Text style={styles.compactLockedBadgeText}>LOCKED</Text>
                         </View>
-                      ) : (
-                        <Text style={styles.compactPriceText}>₹{finalPrice}</Text>
                       )}
                     </View>
 
                     <Text style={styles.compactStatsText} numberOfLines={1}>
-                      <Text style={{ color: '#008A38', fontWeight: '800' }}>{ts.totalQuestions || 0} Qs</Text>
+                      <Text style={{ color: '#002D72', fontWeight: '800' }}>{ts.totalQuestions || 0} Qs</Text>
                       <Text style={{ color: '#CBD5E1' }}>  •  </Text>
                       <Text>{ts.duration || 60}m</Text>
                       <Text style={{ color: '#CBD5E1' }}>  •  </Text>
@@ -1265,7 +1117,25 @@ export default function FolderExploreScreen() {
 
                   {/* Right: Same-Line Action Button */}
                   <View style={styles.compactBtnWrapper}>
-                    {isAttemptCompleted ? (
+                    {!isUnlocked ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          Vibration.vibrate(50);
+                          Alert.alert(
+                            'Locked Test Series',
+                            `"${ts.title}" is a premium test series.\n\nUnlock the full package (₹${folderFinalPrice}) to start taking all tests with live rankings & detailed solutions.`,
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: `Buy Now (₹${folderFinalPrice})`, onPress: handleProceedToPayment },
+                            ]
+                          );
+                        }}
+                        style={styles.compactBtnLocked}
+                      >
+                        <Lock size={12} color="#002D72" />
+                        <Text style={styles.compactBtnLockedText}>Locked</Text>
+                      </TouchableOpacity>
+                    ) : isAttemptCompleted ? (
                       <TouchableOpacity
                         onPress={(e) => {
                           e.stopPropagation();
@@ -1290,12 +1160,15 @@ export default function FolderExploreScreen() {
                         <Text style={styles.compactBtnReattemptText}>Re-Attempt</Text>
                         <ChevronRight size={11} color="#0072FF" />
                       </View>
+                    ) : isDemo ? (
+                      <View style={styles.compactBtnDemo}>
+                        <FileText size={11} color="#002D72" style={{ marginRight: 2 }} />
+                        <Text style={styles.compactBtnDemoText}>Demo Test</Text>
+                      </View>
                     ) : (
-                      <View style={!isFree && !isSeriesOwned ? styles.compactBtnStart : styles.compactBtnReattempt}>
-                        <Text style={!isFree && !isSeriesOwned ? styles.compactBtnStartText : styles.compactBtnReattemptText}>
-                          {!isFree && !isSeriesOwned ? 'Buy' : 'Start Test'}
-                        </Text>
-                        <ChevronRight size={11} color={!isFree && !isSeriesOwned ? "#FFFFFF" : "#0072FF"} />
+                      <View style={styles.compactBtnStart}>
+                        <Text style={styles.compactBtnStartText}>Start Test</Text>
+                        <ChevronRight size={11} color="#FFFFFF" />
                       </View>
                     )}
                   </View>
@@ -1305,6 +1178,74 @@ export default function FolderExploreScreen() {
           </View>
         )}
 
+        {/* Materials (PDFs / Docs) */}
+        {folder.materials && folder.materials.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Reading Materials & PDFs</Text>
+              <Text style={styles.sectionCount}>{folder.materials.length} Docs</Text>
+            </View>
+            {folder.materials.map((mat: any) => {
+              const isMatFree = mat.isFree || hasAccess;
+              return (
+                <TouchableOpacity
+                  key={mat.id}
+                  style={styles.card}
+                  activeOpacity={0.8}
+                  onPress={async () => {
+                    if (!isMatFree) {
+                      Vibration.vibrate(50);
+                      Alert.alert(
+                        'Locked Document',
+                        `"${mat.title}" is part of the premium course package. Unlock the package to read.`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: `Buy Package (₹${folderFinalPrice})`, onPress: handleProceedToPayment }
+                        ]
+                      );
+                      return;
+                    }
+                    if (mat.pdfUrl) {
+                      try {
+                        await WebBrowser.openBrowserAsync(mat.pdfUrl);
+                      } catch (e) {
+                        Linking.openURL(mat.pdfUrl).catch(() => {
+                          Alert.alert('Error', 'Unable to open PDF link.');
+                        });
+                      }
+                    } else {
+                      Alert.alert('Notice', 'No PDF attached to this material.');
+                    }
+                  }}
+                >
+                  <View style={[styles.iconBox, { backgroundColor: isMatFree ? '#FFF1F2' : '#F1F5F9' }]}>
+                    {isMatFree ? (
+                      <FileText size={24} color="#E11D48" />
+                    ) : (
+                      <Lock size={22} color="#64748B" />
+                    )}
+                  </View>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>{mat.title}</Text>
+                    <Text style={styles.cardSubtitle}>
+                      {mat.type ? `${mat.type} • ` : ''}{isMatFree ? 'Free Document' : 'Premium Document (Locked)'}
+                    </Text>
+                  </View>
+                  <View style={[styles.openPdfPill, !isMatFree && { backgroundColor: '#F1F5F9' }]}>
+                    <Text style={[styles.openPdfPillText, !isMatFree && { color: '#64748B' }]}>
+                      {isMatFree ? 'Read' : 'Locked'}
+                    </Text>
+                    {!isMatFree ? (
+                      <Lock size={12} color="#64748B" />
+                    ) : (
+                      <ChevronRight size={14} color="#E11D48" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -2485,5 +2426,263 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#64748B',
+  },
+
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  cardGlossHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+  },
+
+  // Hero Buy Package Card Styles
+  heroBuyCardWrapper: {
+    marginBottom: 16,
+    shadowColor: '#002D72',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  heroBuyCardBorder: {
+    borderRadius: 16,
+    borderWidth: 1.8,
+    borderColor: '#002D72',
+    borderBottomWidth: 4,
+    borderBottomColor: '#001A44',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  heroBuyCardBlur: {
+    width: '100%',
+    overflow: 'hidden',
+  },
+  heroBuyCardGlassOverlay: {
+    padding: 16,
+    position: 'relative',
+    borderTopWidth: 1.2,
+    borderTopColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  heroBuyTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  heroBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 45, 114, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 45, 114, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    gap: 4,
+  },
+  heroBadgeText: {
+    color: '#002D72',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  heroValidityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  heroValidityText: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  heroTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#002D72',
+    lineHeight: 22,
+    marginBottom: 4,
+  },
+  heroDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+    marginBottom: 10,
+  },
+  heroPriceRow: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  heroPriceLabel: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    color: '#002D72',
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  heroPriceFigures: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
+  heroFinalPrice: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#002D72',
+  },
+  heroOriginalPrice: {
+    fontSize: 13.5,
+    color: '#94A3B8',
+    textDecorationLine: 'line-through',
+  },
+  heroDiscountBadge: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  heroDiscountText: {
+    color: '#EF4444',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  heroBuyBtnBorder: {
+    borderRadius: 12,
+    borderWidth: 1.8,
+    borderColor: '#002D72',
+    borderBottomWidth: 4,
+    borderBottomColor: '#001A44',
+    overflow: 'hidden',
+    shadowColor: '#002D72',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  heroBuyBtnBlur: {
+    width: '100%',
+    overflow: 'hidden',
+  },
+  heroBuyBtnGradient: {
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+  },
+  heroBuyBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroBuyIconPill: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(245, 158, 11, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroBuyBtnText: {
+    color: '#F59E0B',
+    fontSize: 13.5,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  heroBuyArrowPill: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(245, 158, 11, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroTrustRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    gap: 4,
+  },
+  heroTrustText: {
+    color: '#059669',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  // Test Series Card Locked & Badges Styles
+  compactTestCardLocked: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    opacity: 0.95,
+  },
+  compactDemoBadge: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  compactDemoText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#B45309',
+  },
+  compactLockedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  compactLockedBadgeText: {
+    fontSize: 8.5,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+  compactBtnLocked: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.2,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 10,
+    paddingVertical: 5.5,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  compactBtnLockedText: {
+    color: '#002D72',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  compactBtnDemo: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 10,
+    paddingVertical: 5.5,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  compactBtnDemoText: {
+    color: '#B45309',
+    fontSize: 11,
+    fontWeight: '900',
   },
 });

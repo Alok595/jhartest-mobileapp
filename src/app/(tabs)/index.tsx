@@ -16,6 +16,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { apiClient, getCachedData, setCachedData } from '../../services/api';
 import {
   Bell,
@@ -65,14 +66,10 @@ const BANNERS = [
 ];
 
 const QUICK_ACTIONS_FALLBACK = [
-  { id: '1', title: 'Paid Video\nCourse', icon: 'Video', iconColor: '#0072FF', bgColor: '#E0F2FE', url: '' },
-  { id: '2', title: 'Paid Pdf\nCourse', icon: 'FileText', iconColor: '#00C853', bgColor: '#DCFCE7', url: '' },
-  { id: '3', title: 'Test Series', icon: 'ClipboardList', iconColor: '#0284C7', bgColor: '#E0F2FE', url: '' },
-  { id: '4', title: 'Book Store', icon: 'ShoppingBag', iconColor: '#D97706', bgColor: '#FEF3C7', url: '' },
-  { id: '5', title: 'E-Books', icon: 'BookOpen', iconColor: '#7C3AED', bgColor: '#F3E8FF', url: '' },
-  { id: '6', title: 'Syllabus', icon: 'GraduationCap', iconColor: '#E11D48', bgColor: '#FFE4E6', url: '' },
-  { id: '7', title: 'Previous Year\nQuestion', icon: 'BookCheck', iconColor: '#0072FF', bgColor: '#DBEAFE', url: '' },
-  { id: '8', title: 'Social Media\nLinks', icon: 'Share2', iconColor: '#059669', bgColor: '#D1FAE5', url: '' },
+  { id: '1', title: 'MY TESTS', icon: 'ClipboardList', color: '#0072FF', url: '/(tabs)/purchases' },
+  { id: '2', title: 'FREE TESTS', icon: 'BookOpen', color: '#059669', url: '/free-tests' },
+  { id: '3', title: 'CHAPTER WISE TEST', icon: 'Layers', color: '#D97706', url: '/chapter-tests' },
+  { id: '4', title: 'SYLLABUS', icon: 'FileText', color: '#E11D48', url: '/section/SYLLABUS' },
 ];
 
 export default function HomeScreen() {
@@ -81,6 +78,28 @@ export default function HomeScreen() {
   const [quickActions, setQuickActions] = useState<any[]>(QUICK_ACTIONS_FALLBACK);
   const [refreshing, setRefreshing] = useState(false);
   const spinAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  React.useEffect(() => {
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.025,
+          duration: 1300,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1300,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseLoop.start();
+    return () => pulseLoop.stop();
+  }, []);
 
   const startSpinAnimation = () => {
     spinAnim.setValue(0);
@@ -138,21 +157,21 @@ export default function HomeScreen() {
 
   const renderIcon = (iconName: string, iconColor = '#0072FF') => {
     switch(iconName) {
-      case 'Video': return <Video size={28} color={iconColor} />;
-      case 'FileText': return <FileText size={28} color={iconColor} />;
-      case 'ClipboardList': return <ClipboardList size={28} color={iconColor} />;
-      case 'ShoppingBag': return <ShoppingBag size={28} color={iconColor} />;
-      case 'BookOpen': return <BookOpen size={28} color={iconColor} />;
-      case 'GraduationCap': return <GraduationCap size={28} color={iconColor} />;
-      case 'BookCheck': return <BookCheck size={28} color={iconColor} />;
-      case 'Share2': return <Share2 size={28} color={iconColor} />;
-      case 'PlayCircle': return <PlayCircle size={28} color={iconColor} />;
-      case 'Calendar': return <Calendar size={28} color={iconColor} />;
-      case 'Award': return <Award size={28} color={iconColor} />;
-      case 'Users': return <Users size={28} color={iconColor} />;
-      case 'TrendingUp': return <TrendingUp size={28} color={iconColor} />;
-      case 'Layers': return <Layers size={28} color={iconColor} />;
-      default: return <Sparkles size={28} color={iconColor} />;
+      case 'Video': return <Video size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'FileText': return <FileText size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'ClipboardList': return <ClipboardList size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'ShoppingBag': return <ShoppingBag size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'BookOpen': return <BookOpen size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'GraduationCap': return <GraduationCap size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'BookCheck': return <BookCheck size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'Share2': return <Share2 size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'PlayCircle': return <PlayCircle size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'Calendar': return <Calendar size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'Award': return <Award size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'Users': return <Users size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'TrendingUp': return <TrendingUp size={24} color={iconColor} strokeWidth={2.2} />;
+      case 'Layers': return <Layers size={24} color={iconColor} strokeWidth={2.2} />;
+      default: return <BookOpen size={24} color={iconColor} strokeWidth={2.2} />;
     }
   };
 
@@ -162,9 +181,55 @@ export default function HomeScreen() {
     if (/^(https?:\/\/|youtube\.com|youtu\.be|www\.)/i.test(trimmed)) {
       const fullUrl = /^(https?:\/\/)/i.test(trimmed) ? trimmed : `https://${trimmed}`;
       Linking.openURL(fullUrl).catch((err) => console.error('Failed to open URL:', err));
+    } else if (trimmed === '/(tabs)/purchases' || trimmed === '/purchases') {
+      router.push('/purchases' as any);
     } else {
       router.push(trimmed as any);
     }
+  };
+
+  const handlePressQuickAction = (action: any) => {
+    const titleLower = (action.title || '').toLowerCase();
+    const url = action.url?.trim();
+
+    if (titleLower.includes('syllabus')) {
+      router.push({
+        pathname: '/section/SYLLABUS' as any,
+        params: {
+          title: 'Syllabus',
+          icon: 'FileText',
+          color: '#E11D48',
+        },
+      });
+      return;
+    }
+
+    if (url) {
+      if (/^(https?:\/\/|youtube\.com|youtu\.be|www\.)/i.test(url)) {
+        const fullUrl = /^(https?:\/\/)/i.test(url) ? url : `https://${url}`;
+        Linking.openURL(fullUrl).catch((err) => console.error('Failed to open URL:', err));
+        return;
+      } else if (url === '/(tabs)/purchases' || url === '/purchases') {
+        router.push('/purchases' as any);
+        return;
+      } else {
+        router.push(url as any);
+        return;
+      }
+    }
+
+    // Default: Open dynamic dedicated section catalog screen!
+    const key = (action.title || action.id || 'SECTION')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_');
+    router.push({
+      pathname: `/section/${key}` as any,
+      params: {
+        title: action.title,
+        icon: action.icon,
+        color: action.color,
+      },
+    });
   };
 
   const spin = spinAnim.interpolate({
@@ -181,7 +246,7 @@ export default function HomeScreen() {
         <View style={styles.headerLeft}>
           <View style={styles.brandContainer}>
             <Image
-              source={require('../../../assets/images/test5.jpeg')}
+              source={require('../../../assets/images/newlogo.jpeg')}
               style={styles.headerFullLogo}
               contentFit="contain"
             />
@@ -202,9 +267,6 @@ export default function HomeScreen() {
 
           <TouchableOpacity style={styles.bellButton} activeOpacity={0.7} onPress={() => router.push('/notifications')}>
             <Bell size={21} color="#1F1A14" />
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>7</Text>
-            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -255,38 +317,68 @@ export default function HomeScreen() {
           ))}
         </ScrollView>
 
-        {/* 2-Column Action Grid with Blue-Green Gradient Border Matching Logo */}
-        <View style={styles.actionGrid}>
-          {quickActions.map((action) => (
+        {/* "Add Test Series" Button with matching Gradient Border */}
+        <Animated.View style={[styles.addTestSeriesWrapper, { transform: [{ scale: pulseAnim }] }]}>
+          <TouchableOpacity
+            activeOpacity={0.82}
+            onPress={() => router.push('/exams' as any)}
+            style={styles.addTestSeriesTouchable}
+          >
             <LinearGradient
-              key={action.id}
               colors={['#0072FF', '#00C853']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={styles.gradientCardBorder}
+              style={styles.addTestSeriesGradientBorder}
             >
-              <TouchableOpacity
-                style={styles.actionCard}
-                activeOpacity={0.82}
-                onPress={() => handlePressUrl(action.url)}
-              >
-                <View style={[styles.actionIconBox, { backgroundColor: action.bgColor || '#F1F5F9' }]}>
-                  {renderIcon(action.icon, action.iconColor || action.color || '#0072FF')}
+              <View style={styles.addTestSeriesInner}>
+                <View style={styles.addTestSeriesLeft}>
+                  <View style={styles.addTestSeriesIconBox}>
+                    <Sparkles color="#0072FF" size={20} />
+                  </View>
+                  <Text style={styles.addTestSeriesText}>Add Test Series</Text>
                 </View>
-                <Text style={styles.actionTitle} numberOfLines={2}>
-                  {action.title.replace('\\n', '\n')}
-                </Text>
-              </TouchableOpacity>
+                <View style={styles.addTestSeriesArrowPill}>
+                  <ChevronRight color="#00C853" size={20} strokeWidth={2.5} />
+                </View>
+              </View>
             </LinearGradient>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* Quick Action Grid (My Tests, Free Tests, Chapter Tests, Syllabus) */}
+        <View style={styles.actionGrid}>
+          {quickActions.map((action, idx) => (
+            <TouchableOpacity
+              key={action.id || idx}
+              style={styles.actionCardWrapper}
+              activeOpacity={0.82}
+              onPress={() => handlePressQuickAction(action)}
+            >
+              <LinearGradient
+                colors={['#0072FF', '#00C853']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.actionCardGradientBorder}
+              >
+                <View style={styles.actionCardInner}>
+                  <View style={[styles.actionIconBox, { backgroundColor: '#F1F5F9' }]}>
+                    {renderIcon(action.icon, action.color || '#0072FF')}
+                  </View>
+                  <Text style={styles.actionTitle} numberOfLines={2}>
+                    {action.title ? action.title.replace('\\n', '\n') : ''}
+                  </Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
           ))}
         </View>
 
-        {/* Student Trust Banner */}
+        {/* Slogan Banner */}
         <View style={styles.trustCard}>
-          <CheckCircle2 size={24} color="#10B981" />
+          <TrendingUp size={24} color="#0072FF" />
           <View style={styles.trustTextContainer}>
-            <Text style={styles.trustTitle}>50,000+ Aspirants Trust Us</Text>
-            <Text style={styles.trustSubtitle}>Real exam simulation with detailed solutions and all-Jharkhand rank.</Text>
+            <Text style={styles.trustTitle}>Prep Smarter, Score Higher</Text>
+            <Text style={styles.trustSubtitle}>Real exam simulation with detailed solutions & all-Jharkhand rank analysis.</Text>
           </View>
         </View>
       </ScrollView>
@@ -422,41 +514,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginTop: 4,
   },
-  gradientCardBorder: {
+  actionCardWrapper: {
     width: (width - 44) / 2,
-    borderRadius: 10,
-    padding: 2, // 2px gradient border
-    marginBottom: 14,
-    shadowColor: '#0072FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 5,
+    marginBottom: 12,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
+    elevation: 3,
   },
-  actionCard: {
-    flex: 1,
+  actionCardGradientBorder: {
+    padding: 1.8,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  actionCardInner: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 18,
+    borderRadius: 12.2,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 86,
+    minHeight: 74,
   },
   actionIconBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   actionTitle: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 13.5,
     fontWeight: '800',
     color: '#0F172A',
-    lineHeight: 20,
+    lineHeight: 17,
+    letterSpacing: -0.2,
   },
   trustCard: {
     flexDirection: 'row',
@@ -474,14 +569,70 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   trustTitle: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '800',
-    color: '#0072FF',
+    color: '#002D72',
+    letterSpacing: 0.2,
   },
   trustSubtitle: {
-    fontSize: 11,
-    color: '#3B82F6',
+    fontSize: 11.5,
+    color: '#2563EB',
     marginTop: 2,
     fontWeight: '500',
+    lineHeight: 16,
+  },
+  addTestSeriesWrapper: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    marginTop: 4,
+  },
+  addTestSeriesTouchable: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  addTestSeriesGradientBorder: {
+    padding: 2,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  addTestSeriesInner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  addTestSeriesLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  addTestSeriesIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  addTestSeriesArrowPill: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#ECFDF5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addTestSeriesText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#002D72',
+    letterSpacing: 0.4,
   },
 });

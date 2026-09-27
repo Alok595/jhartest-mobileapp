@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FileText, ChevronRight, ArrowLeft, Play } from 'lucide-react-native';
+import { FileText, ChevronRight, ArrowLeft, Play, BookOpen } from 'lucide-react-native';
 import { getApiBaseUrl, getCachedData, setCachedData } from '../../../services/api';
 
 export default function SubcategoryExploreScreen() {
@@ -112,20 +112,28 @@ export default function SubcategoryExploreScreen() {
                     : 0;
                   const finalPrice = series.discountPrice || series.price;
 
+                  const seriesImage = series.image || series.thumbnail || series.imageUrl;
+
                   return (
                     <TouchableOpacity 
                       key={series.id} 
                       style={styles.card}
                       onPress={() => router.push(`/series/${series.id}`)}
-                      activeOpacity={0.8}
+                      activeOpacity={0.88}
                     >
-                      {/* Left Side: Thumbnail with New Badge */}
+                      {/* Left Side: Enlarged Thumbnail with New Badge */}
                       <View style={styles.thumbnailContainer}>
-                        {series.image ? (
-                          <Image source={{ uri: series.image }} style={styles.thumbnailImage} />
+                        {seriesImage ? (
+                          <Image
+                            source={{ uri: seriesImage }}
+                            style={styles.thumbnailImage}
+                            contentFit="cover"
+                            transition={200}
+                            cachePolicy="memory-disk"
+                          />
                         ) : (
                           <View style={styles.thumbnailPlaceholder}>
-                            <Play size={28} color={!series.isFree ? '#059669' : '#0284C7'} />
+                            <BookOpen size={30} color="#002D72" />
                           </View>
                         )}
                         <View style={styles.newBadge}>
@@ -134,49 +142,35 @@ export default function SubcategoryExploreScreen() {
                         </View>
                       </View>
 
-                      {/* Right Side: Content */}
+                      {/* Right Side: Content & Small Action Button */}
                       <View style={styles.cardContent}>
-                        <View>
-                          <Text style={[styles.cardTitle, { fontSize: 15 }]} numberOfLines={2}>
-                            {series.title}
-                          </Text>
-                          
-                          <View style={styles.priceRow}>
-                            {!series.isFree && (
-                              <>
-                                <Text style={styles.finalPrice}>
-                                  ₹ {finalPrice}
-                                </Text>
-                                {series.price && series.discountPrice && (
-                                  <Text style={styles.originalPrice}>₹ {series.price}</Text>
-                                )}
-                                
-                                {discountPercent > 0 && (
-                                  <View style={styles.cardDiscountPill}>
-                                    <Text style={styles.cardDiscountText}>{discountPercent}% off</Text>
-                                  </View>
-                                )}
-                              </>
-                            )}
-                          </View>
+                        <Text style={styles.cardTitle} numberOfLines={2}>
+                          {series.title}
+                        </Text>
+                        
+                        <View style={styles.priceRow}>
+                          {series.isFree ? (
+                            <Text style={[styles.finalPrice, { color: '#059669' }]}>FREE</Text>
+                          ) : (
+                            <>
+                              <Text style={styles.finalPrice}>₹ {finalPrice}</Text>
+                              {series.price && series.discountPrice && (
+                                <Text style={styles.originalPrice}>₹ {series.price}</Text>
+                              )}
+                              {discountPercent > 0 && (
+                                <View style={styles.cardDiscountPill}>
+                                  <Text style={styles.cardDiscountText}>{discountPercent}% off</Text>
+                                </View>
+                              )}
+                            </>
+                          )}
                         </View>
 
-                        {/* Action Button Row */}
-                        <View style={{ marginTop: 'auto', flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 6 }}>
-                          <View style={{ 
-                            backgroundColor: '#0072FF', 
-                            paddingHorizontal: 12, 
-                            paddingVertical: 5, 
-                            borderRadius: 8,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                          }}>
-                            <Text style={{ 
-                              color: '#FFFFFF', 
-                              fontSize: 11, 
-                              fontWeight: '700' 
-                            }}>
-                              {!series.isFree ? 'Buy Series' : 'View Series'}
+                        {/* Small Compact Button on Right */}
+                        <View style={styles.btnRow}>
+                          <View style={styles.buyBtn}>
+                            <Text style={styles.buyBtnText}>
+                              {!series.isFree ? 'Buy Now' : 'Start Now'}
                             </Text>
                           </View>
                         </View>
@@ -288,23 +282,23 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    shadowColor: '#000',
+    marginBottom: 10,
+    padding: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
-    padding: 8,
-    gap: 12,
+    shadowRadius: 3,
+    elevation: 2,
   },
   thumbnailContainer: {
-    width: 145,
-    height: 95,
-    backgroundColor: '#F1F5F9',
+    width: 148,
+    height: 100,
+    backgroundColor: '#EEF6FF',
     borderRadius: 8,
     overflow: 'hidden',
     position: 'relative',
@@ -319,7 +313,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#E0F2FE',
+    backgroundColor: '#EEF6FF',
     width: '100%',
     height: '100%',
   },
@@ -327,67 +321,86 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: '#0F172A',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderBottomRightRadius: 8,
+    zIndex: 10,
   },
   newBadgeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#4ADE80',
     marginRight: 4,
   },
   newBadgeText: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
   },
   cardContent: {
     flex: 1,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingVertical: 4,
+    paddingRight: 6,
+    gap: 4,
   },
   cardTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#1E293B',
+    fontWeight: '800',
+    color: '#0F172A',
     lineHeight: 18,
-    marginBottom: 8,
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: 6,
-    marginBottom: 4,
   },
   finalPrice: {
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: '800',
     color: '#0F172A',
   },
   originalPrice: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
     color: '#94A3B8',
     textDecorationLine: 'line-through',
   },
   cardDiscountPill: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: '#FFF1F2',
     borderWidth: 1,
     borderColor: '#FECACA',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
   },
   cardDiscountText: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '700',
-    color: '#EF4444',
+    color: '#F43F5E',
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 2,
+  },
+  buyBtn: {
+    backgroundColor: '#00C853',
+    borderRadius: 8,
+    paddingVertical: 4.5,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buyBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12.5,
+    fontWeight: '800',
   },
 });
