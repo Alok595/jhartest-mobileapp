@@ -16,8 +16,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { apiClient, getCachedData, setCachedData } from '../../services/api';
+import { apiClient, getCachedData, setCachedData, prefetchAppCatalog } from '../../services/api';
 import {
   Bell,
   RotateCw,
@@ -153,6 +152,7 @@ export default function HomeScreen() {
 
     // Background fresh fetch
     fetchFreshData();
+    prefetchAppCatalog();
   }, []);
 
   const renderIcon = (iconName: string, iconColor = '#0072FF') => {

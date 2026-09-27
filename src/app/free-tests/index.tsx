@@ -59,8 +59,8 @@ export default function FreeTestsCatalogScreen() {
         getCachedData<any[]>('free_catalog_items'),
       ]);
 
-      if (cachedCats && cachedCats.length > 0) setCategories(cachedCats);
-      if (cachedFreeItems && cachedFreeItems.length > 0) {
+      if (cachedCats && Array.isArray(cachedCats)) setCategories(cachedCats);
+      if (cachedFreeItems && Array.isArray(cachedFreeItems)) {
         setItems(cachedFreeItems);
         setLoading(false);
       }

@@ -32,7 +32,7 @@ import {
   RotateCw,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import { fetchMyOrders } from '../../services/api';
+import { fetchMyOrders, getCachedData, setCachedData } from '../../services/api';
 
 type FilterTab = 'ALL' | 'ACTIVE' | 'PENDING' | 'REJECTED';
 
@@ -45,17 +45,28 @@ export default function PurchasesTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterTab>('ALL');
 
-  const loadData = async () => {
+  const loadData = async (isBackground = false) => {
     if (!user) {
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
+    // 1. Instant Cache Load if first load
+    if (!isBackground) {
+      const cached = await getCachedData<any[]>(`my_orders_${user.id}`);
+      if (cached && Array.isArray(cached)) {
+        setOrders(cached);
+        setLoading(false);
+      }
+    }
+
+    // 2. Network Fetch in background / fresh
     try {
       const res = await fetchMyOrders();
       if (res?.success && Array.isArray(res.data)) {
         setOrders(res.data);
+        setCachedData(`my_orders_${user.id}`, res.data);
       }
     } catch (err) {
       console.log('Error loading orders:', err);

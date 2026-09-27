@@ -60,8 +60,8 @@ export default function ChapterTestsCatalogScreen() {
         getCachedData<any[]>('chapter_catalog_items'),
       ]);
 
-      if (cachedCats && cachedCats.length > 0) setCategories(cachedCats);
-      if (cachedChapterItems && cachedChapterItems.length > 0) {
+      if (cachedCats && Array.isArray(cachedCats)) setCategories(cachedCats);
+      if (cachedChapterItems && Array.isArray(cachedChapterItems)) {
         setItems(cachedChapterItems);
         setLoading(false);
       }

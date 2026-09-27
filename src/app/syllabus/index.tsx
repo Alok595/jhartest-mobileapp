@@ -60,8 +60,8 @@ export default function SyllabusCatalogScreen() {
         getCachedData<any[]>('syllabus_catalog_items'),
       ]);
 
-      if (cachedCats && cachedCats.length > 0) setCategories(cachedCats);
-      if (cachedSyllabusItems && cachedSyllabusItems.length > 0) {
+      if (cachedCats && Array.isArray(cachedCats)) setCategories(cachedCats);
+      if (cachedSyllabusItems && Array.isArray(cachedSyllabusItems)) {
         setItems(cachedSyllabusItems);
         setLoading(false);
       }

@@ -316,3 +316,117 @@ export const prefetchMultipleTests = async (testIds: string[]): Promise<void> =>
     await Promise.allSettled(batch.map(id => prefetchTestData(id)));
   }
 };
+
+/**
+ * Prefetches all catalog metadata (categories, syllabus items, free tests, test series) in the background.
+ * Ensures all catalog screens open instantaneously.
+ */
+let catalogPrefetchPromise: Promise<void> | null = null;
+export const prefetchAppCatalog = (): Promise<void> => {
+  if (catalogPrefetchPromise) return catalogPrefetchPromise;
+
+  catalogPrefetchPromise = (async () => {
+    try {
+      const [catsRes, subsRes, examsRes, foldersRes, seriesRes, materialsRes] = await Promise.allSettled([
+        apiClient.get('/categories?active=true'),
+        apiClient.get('/subcategories?active=true'),
+        apiClient.get('/exams?active=true'),
+        apiClient.get('/folders'),
+        apiClient.get('/test-series'),
+        apiClient.get('/materials'),
+      ]);
+
+      const catList: any[] = [];
+      if (examsRes.status === 'fulfilled' && Array.isArray(examsRes.value?.data)) {
+        examsRes.value.data.forEach((e: any) => {
+          catList.push({ id: e.id, name: e.name || e.shortName || 'Exam' });
+        });
+      }
+      if (subsRes.status === 'fulfilled' && Array.isArray(subsRes.value?.data)) {
+        subsRes.value.data.forEach((s: any) => {
+          if (!catList.some((c) => c.id === s.id)) {
+            catList.push({ id: s.id, name: s.name });
+          }
+        });
+      }
+      if (catsRes.status === 'fulfilled' && Array.isArray(catsRes.value?.data)) {
+        catsRes.value.data.forEach((c: any) => {
+          if (!catList.some((item) => item.id === c.id)) {
+            catList.push({ id: c.id, name: c.name });
+          }
+        });
+      }
+
+      if (catList.length > 0) {
+        await setCachedData('catalog_categories', catList);
+      }
+
+      const folderData = foldersRes.status === 'fulfilled' && Array.isArray(foldersRes.value?.data) ? foldersRes.value.data : [];
+      const seriesData = seriesRes.status === 'fulfilled' && Array.isArray(seriesRes.value?.data) ? seriesRes.value.data : [];
+      const materialData = materialsRes.status === 'fulfilled' && Array.isArray(materialsRes.value?.data) ? materialsRes.value.data : [];
+
+      if (seriesData.length > 0) {
+        await setCachedData('test_series', seriesData);
+      }
+
+      // 1. Process Syllabus items
+      const syllabusFolders = folderData
+        .filter((f: any) => {
+          const sec = (f.icon || '').toUpperCase();
+          const name = (f.name || '').toLowerCase();
+          return sec === 'SYLLABUS' || name.includes('syllabus') || name.includes('curriculum');
+        })
+        .map((f: any) => ({ ...f, itemType: 'folder' }));
+
+      const syllabusMaterials = materialData
+        .filter((m: any) => {
+          const type = (m.type || '').toUpperCase();
+          const title = (m.title || m.name || '').toLowerCase();
+          return type === 'SYLLABUS' || title.includes('syllabus') || title.includes('curriculum');
+        })
+        .map((m: any) => ({ ...m, name: m.title || m.name, image: m.thumbnail || m.image, itemType: 'material' }));
+
+      const syllabusSeries = seriesData
+        .filter((s: any) => {
+          const title = (s.title || '').toLowerCase();
+          return title.includes('syllabus') || title.includes('curriculum');
+        })
+        .map((s: any) => ({ ...s, name: s.title, itemType: 'test_series' }));
+
+      const syllabusItems = [...syllabusFolders, ...syllabusMaterials, ...syllabusSeries];
+      await setCachedData('syllabus_catalog_items', syllabusItems);
+
+      // 2. Process Free Tests items
+      const freeFolders = folderData
+        .filter((f: any) => (f.icon || '').toUpperCase() === 'FREE_TEST')
+        .map((f: any) => ({ ...f, itemType: 'folder' }));
+
+      const freeSeries = seriesData
+        .filter((s: any) => s.isFree || (s.price !== undefined && Number(s.price) === 0) || (s.title || '').toLowerCase().includes('free'))
+        .map((s: any) => ({ ...s, name: s.title, itemType: 'test_series' }));
+
+      const freeMaterials = materialData
+        .filter((m: any) => (m.type || '').toUpperCase() === 'FREE_TEST' || m.isFree)
+        .map((m: any) => ({ ...m, name: m.title || m.name, image: m.thumbnail || m.image, itemType: 'material' }));
+
+      const freeItems = [...freeFolders, ...freeSeries, ...freeMaterials];
+      await setCachedData('free_catalog_items', freeItems);
+
+      // 3. Process Chapter Tests items
+      const chapterFolders = folderData
+        .filter((f: any) => (f.icon || '').toUpperCase() === 'CHAPTER_TEST' || (f.name || '').toLowerCase().includes('chapter'))
+        .map((f: any) => ({ ...f, itemType: 'folder' }));
+
+      const chapterSeries = seriesData
+        .filter((s: any) => (s.title || '').toLowerCase().includes('chapter'))
+        .map((s: any) => ({ ...s, name: s.title, itemType: 'test_series' }));
+
+      const chapterItems = [...chapterFolders, ...chapterSeries];
+      await setCachedData('chapter_catalog_items', chapterItems);
+    } catch (e) {
+      // Silent prefetch failure
+    }
+  })();
+
+  return catalogPrefetchPromise;
+};

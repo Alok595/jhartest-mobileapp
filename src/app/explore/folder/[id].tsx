@@ -140,7 +140,11 @@ export default function FolderExploreScreen() {
       if (res?.data?.success) {
         setHasAccess(res.data.hasAccess);
         if (res.data.hasAccess) {
+          setPaymentStep('details');
           if (userId) setCachedData(`access_folder_${id}_${userId}`, true);
+          if (accessReason === 'PENDING') {
+            router.replace('/(tabs)/purchases');
+          }
         } else {
           setAccessReason(res.data.reason || 'NO_ORDER');
           setOrderData(res.data.order || null);
@@ -151,6 +155,27 @@ export default function FolderExploreScreen() {
       console.error('Error checking folder access:', err);
     }
   };
+
+  // Auto-redirect to My Batches when approved while in PENDING state
+  useEffect(() => {
+    let interval: any = null;
+    if (!hasAccess && accessReason === 'PENDING' && user?.id) {
+      interval = setInterval(async () => {
+        try {
+          const res = await apiClient.get(`/orders/check-access?folderId=${id}&userId=${user.id}`);
+          if (res?.data?.success && res.data.hasAccess) {
+            setHasAccess(true);
+            setPaymentStep('details');
+            setCachedData(`access_folder_${id}_${user.id}`, true);
+            router.replace('/(tabs)/purchases');
+          }
+        } catch (e) {}
+      }, 4000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [hasAccess, accessReason, id, user?.id]);
 
   const fetchPaymentSettings = async () => {
     try {
@@ -233,6 +258,16 @@ export default function FolderExploreScreen() {
     ).start();
 
     try {
+      if (user?.id) {
+        const res = await apiClient.get(`/orders/check-access?folderId=${id}&userId=${user.id}`);
+        if (res?.data?.success && res.data.hasAccess) {
+          setHasAccess(true);
+          setPaymentStep('details');
+          setCachedData(`access_folder_${id}_${user.id}`, true);
+          router.replace('/(tabs)/purchases');
+          return;
+        }
+      }
       await initialize();
     } catch (e) {
       console.warn('Folder refresh error:', e);
@@ -393,6 +428,7 @@ export default function FolderExploreScreen() {
         setHasAccess(false);
         setAccessReason('PENDING');
         setOrderData(data.data || { transactionId: transactionId.trim() });
+        setPaymentStep('details');
 
         Alert.alert(
           'Verification Submitted!', 
@@ -415,11 +451,10 @@ export default function FolderExploreScreen() {
               } 
             },
             {
-              text: 'View Status',
+              text: 'Go to My Batches',
               onPress: () => {
-                checkAccess(folder);
+                router.replace('/(tabs)/purchases');
               },
-              style: 'cancel'
             }
           ]
         );
@@ -523,6 +558,15 @@ export default function FolderExploreScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* Go to My Batches Button */}
+            <TouchableOpacity 
+              style={[styles.refreshBtn, { backgroundColor: '#002D72', marginBottom: 10 }]} 
+              onPress={() => router.replace('/(tabs)/purchases')} 
+              activeOpacity={0.85}
+            >
+              <Text style={styles.refreshBtnText}>Go to My Batches</Text>
+            </TouchableOpacity>
+
             {/* Refresh / Check Status Button */}
             <TouchableOpacity 
               style={[styles.refreshBtn, refreshing && { opacity: 0.75 }]} 
@@ -549,7 +593,7 @@ export default function FolderExploreScreen() {
   }
 
   // --- Payment Step Screen (QR / Form) ---
-  if (paymentStep === 'qr' || paymentStep === 'form') {
+  if (!hasAccess && (paymentStep === 'qr' || paymentStep === 'form')) {
     const finalPrice = folder.discountPrice || folder.price || 0;
     const originalPrice = folder.price || finalPrice;
     const isDiscounted = folder.discountPrice && folder.discountPrice < folder.price;
