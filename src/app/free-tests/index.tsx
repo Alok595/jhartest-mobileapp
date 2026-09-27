@@ -157,15 +157,25 @@ export default function FreeTestsCatalogScreen() {
     // Category filter
     if (selectedCategoryId !== 'ALL') {
       const selectedCat = categories.find((c) => c.id === selectedCategoryId);
-      const catName = selectedCat?.name?.toLowerCase() || '';
+      const catName = selectedCat?.name || '';
 
       result = result.filter((item) => {
-        if (item.categoryId === selectedCategoryId || item.category === selectedCategoryId) return true;
+        if (item.categoryId === selectedCategoryId || item.category === selectedCategoryId || item.icon === selectedCategoryId || item.examId === selectedCategoryId) return true;
         if (catName) {
-          const itemName = (item.name || item.title || '').toLowerCase();
-          const itemDesc = (item.description || '').toLowerCase();
-          const words = catName.split(/[\s-]+/).filter((w: string) => w.length > 2);
-          if (words.some((w: string) => itemName.includes(w) || itemDesc.includes(w))) return true;
+          const normalize = (str: string) => (str || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+          const normItem = normalize((item.name || item.title || '') + ' ' + (item.description || ''));
+          const normCat = normalize(catName);
+
+          if (normCat) {
+            if (normItem.includes(normCat)) return true;
+            const compactItem = normItem.replace(/\s+/g, '');
+            const compactCat = normCat.replace(/\s+/g, '');
+            if (compactItem.includes(compactCat)) return true;
+
+            const catTokens = normCat.split(/\s+/).filter(Boolean);
+            const itemTokens = new Set(normItem.split(/\s+/).filter(Boolean));
+            if (catTokens.length > 0 && catTokens.every((tok) => itemTokens.has(tok))) return true;
+          }
         }
         return false;
       });
