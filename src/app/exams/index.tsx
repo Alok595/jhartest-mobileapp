@@ -85,18 +85,6 @@ export default function ExamsCatalogScreen() {
       ]);
 
       const catList: any[] = [];
-      if (examsRes.status === 'fulfilled' && Array.isArray(examsRes.value?.data)) {
-        examsRes.value.data.forEach((e: any) => {
-          catList.push({ id: e.id, name: e.name || e.shortName || 'Exam' });
-        });
-      }
-      if (subsRes.status === 'fulfilled' && Array.isArray(subsRes.value?.data)) {
-        subsRes.value.data.forEach((s: any) => {
-          if (!catList.some(c => c.id === s.id)) {
-            catList.push({ id: s.id, name: s.name });
-          }
-        });
-      }
       if (catsRes.status === 'fulfilled' && Array.isArray(catsRes.value?.data)) {
         catsRes.value.data.forEach((c: any) => {
           if (!catList.some(item => item.id === c.id)) {
