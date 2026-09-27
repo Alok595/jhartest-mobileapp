@@ -69,7 +69,7 @@ const QUICK_ACTIONS_FALLBACK = [
   { id: '1', title: 'MY TESTS', icon: 'ClipboardList', color: '#0072FF', url: '/(tabs)/purchases' },
   { id: '2', title: 'FREE TESTS', icon: 'BookOpen', color: '#059669', url: '/free-tests' },
   { id: '3', title: 'CHAPTER WISE TEST', icon: 'Layers', color: '#D97706', url: '/chapter-tests' },
-  { id: '4', title: 'SYLLABUS', icon: 'FileText', color: '#E11D48', url: '/section/SYLLABUS' },
+  { id: '4', title: 'SYLLABUS', icon: 'FileText', color: '#E11D48', url: '/syllabus' },
 ];
 
 export default function HomeScreen() {
@@ -193,14 +193,7 @@ export default function HomeScreen() {
     const url = action.url?.trim();
 
     if (titleLower.includes('syllabus')) {
-      router.push({
-        pathname: '/section/SYLLABUS' as any,
-        params: {
-          title: 'Syllabus',
-          icon: 'FileText',
-          color: '#E11D48',
-        },
-      });
+      router.push('/syllabus' as any);
       return;
     }
 

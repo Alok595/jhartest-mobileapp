@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import {
   ArrowLeft,
   Search,
@@ -23,28 +23,16 @@ import {
   RotateCw,
   Folder,
   CheckCircle2,
-  Calendar,
-  PlayCircle,
-  Video,
-  Award,
-  Layers,
-  Sparkles,
   FileText,
-  GraduationCap,
-  ClipboardList,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react-native';
 import { apiClient, getCachedData, setCachedData } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
-export default function DynamicSectionCatalogScreen() {
+export default function SyllabusCatalogScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id: string; title?: string; icon?: string; color?: string }>();
   const { user } = useAuth();
-
-  const rawKey = params.id || '';
-  const sectionKey = rawKey.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-  const sectionTitle = (params.title || (rawKey.toLowerCase() === 'syllabus' ? 'Exam Syllabus' : rawKey)).replace(/\\n/g, ' ');
 
   const [categories, setCategories] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
@@ -53,11 +41,6 @@ export default function DynamicSectionCatalogScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const spinAnim = useRef(new Animated.Value(0)).current;
-
-  const spin = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
 
   const startSpinAnimation = () => {
     spinAnim.setValue(0);
@@ -71,19 +54,19 @@ export default function DynamicSectionCatalogScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const cacheKey = `section_items_${sectionKey}`;
-      const [cachedCats, cachedItems] = await Promise.all([
+      // 1. Instant Cache Load
+      const [cachedCats, cachedSyllabusItems] = await Promise.all([
         getCachedData<any[]>('catalog_categories'),
-        getCachedData<any[]>(cacheKey),
+        getCachedData<any[]>('syllabus_catalog_items'),
       ]);
 
       if (cachedCats && cachedCats.length > 0) setCategories(cachedCats);
-      if (cachedItems && cachedItems.length > 0) {
-        setItems(cachedItems);
+      if (cachedSyllabusItems && cachedSyllabusItems.length > 0) {
+        setItems(cachedSyllabusItems);
         setLoading(false);
       }
 
-      // Fresh Network Fetch
+      // 2. Fresh Network Fetch
       const [catsRes, subsRes, examsRes, foldersRes, seriesRes, materialsRes] = await Promise.allSettled([
         apiClient.get('/categories?active=true'),
         apiClient.get('/subcategories?active=true'),
@@ -114,88 +97,72 @@ export default function DynamicSectionCatalogScreen() {
         });
       }
 
-      if (catList.length > 0) {
-        setCategories(catList);
-        setCachedData('catalog_categories', catList);
-      }
+      setCategories(catList);
+      setCachedData('catalog_categories', catList);
 
-      let allSectionItems: any[] = [];
-      const cleanSearchName = sectionTitle.toLowerCase().replace(/courses|tests|test/g, '').trim();
+      let allSyllabusItems: any[] = [];
 
-      // Filter Folders assigned to this section
+      // 1. Folders tagged as SYLLABUS or with syllabus in name
       if (foldersRes.status === 'fulfilled' && foldersRes.value?.data) {
         const folderData = Array.isArray(foldersRes.value.data) ? foldersRes.value.data : [];
-        const matchedFolders = folderData.filter((f: any) => {
-          const sec = (f.icon || '').toUpperCase();
-          const name = (f.name || '').toLowerCase();
-          return (
-            sec === sectionKey ||
-            sec === String(params.id).toUpperCase() ||
-            (sectionKey === 'CHAPTER_WISE' && (name.includes('chapter') || name.includes('topic') || name.includes('cdp'))) ||
-            (sectionKey === 'SYLLABUS' && (name.includes('syllabus') || name.includes('curriculum'))) ||
-            (cleanSearchName && name.includes(cleanSearchName))
-          );
-        }).map((f: any) => ({
-          ...f,
-          itemType: 'folder',
-        }));
-        allSectionItems = [...allSectionItems, ...matchedFolders];
+        const syllabusFolders = folderData
+          .filter((f: any) => {
+            const sec = (f.icon || '').toUpperCase();
+            const name = (f.name || '').toLowerCase();
+            return sec === 'SYLLABUS' || name.includes('syllabus') || name.includes('curriculum');
+          })
+          .map((f: any) => ({
+            ...f,
+            itemType: 'folder',
+          }));
+        allSyllabusItems = [...allSyllabusItems, ...syllabusFolders];
       }
 
-      // Filter Test Series explicitly assigned to this section
-      if (seriesRes.status === 'fulfilled' && seriesRes.value?.data) {
-        const seriesData = Array.isArray(seriesRes.value.data) ? seriesRes.value.data : [];
-        const matchedSeries = seriesData.filter((s: any) => {
-          const cat = (s.category || '').toUpperCase();
-          const title = (s.title || s.name || '').toLowerCase();
-          return (
-            cat === sectionKey ||
-            cat === String(params.id).toUpperCase() ||
-            (sectionKey === 'CHAPTER_WISE' && (title.includes('chapter') || title.includes('topic') || title.includes('cdp'))) ||
-            (sectionKey === 'SYLLABUS' && (title.includes('syllabus') || title.includes('curriculum'))) ||
-            (cleanSearchName && title.includes(cleanSearchName))
-          );
-        }).map((s: any) => ({
-          ...s,
-          name: s.title || s.name,
-          image: s.thumbnail || s.image,
-          itemType: 'series',
-        }));
-        allSectionItems = [...allSectionItems, ...matchedSeries];
-      }
-
-      // Filter Study Materials / PDFs assigned to this section
+      // 2. Materials / PDFs tagged as SYLLABUS
       if (materialsRes.status === 'fulfilled' && materialsRes.value?.data) {
         const materialData = Array.isArray(materialsRes.value.data) ? materialsRes.value.data : [];
-        const matchedMaterials = materialData.filter((m: any) => {
-          const type = (m.type || '').toUpperCase();
-          const title = (m.title || m.name || '').toLowerCase();
-          return (
-            type === sectionKey ||
-            type === String(params.id).toUpperCase() ||
-            (sectionKey === 'CHAPTER_WISE' && (type === 'CHAPTER_WISE' || title.includes('chapter') || title.includes('topic') || title.includes('cdp'))) ||
-            (sectionKey === 'SYLLABUS' && (type === 'SYLLABUS' || title.includes('syllabus') || title.includes('curriculum'))) ||
-            (sectionKey === 'FREE_TEST' && (type === 'FREE_TEST' || type === 'FREE' || title.includes('free'))) ||
-            (cleanSearchName && title.includes(cleanSearchName))
-          );
-        }).map((m: any) => ({
-          ...m,
-          name: m.title || m.name,
-          image: m.thumbnail || m.image,
-          itemType: 'material',
-        }));
-        allSectionItems = [...allSectionItems, ...matchedMaterials];
+        const syllabusMaterials = materialData
+          .filter((m: any) => {
+            const type = (m.type || '').toUpperCase();
+            const title = (m.title || m.name || '').toLowerCase();
+            return type === 'SYLLABUS' || title.includes('syllabus') || title.includes('curriculum');
+          })
+          .map((m: any) => ({
+            ...m,
+            name: m.title || m.name,
+            image: m.thumbnail || m.image,
+            itemType: 'material',
+          }));
+        allSyllabusItems = [...allSyllabusItems, ...syllabusMaterials];
       }
 
-      setItems(allSectionItems);
-      setCachedData(cacheKey, allSectionItems);
+      // 3. Test Series tagged as SYLLABUS
+      if (seriesRes.status === 'fulfilled' && seriesRes.value?.data) {
+        const seriesData = Array.isArray(seriesRes.value.data) ? seriesRes.value.data : [];
+        const syllabusSeries = seriesData
+          .filter((s: any) => {
+            const cat = (s.category || '').toUpperCase();
+            const title = (s.title || s.name || '').toLowerCase();
+            return cat === 'SYLLABUS' || title.includes('syllabus') || title.includes('curriculum');
+          })
+          .map((s: any) => ({
+            ...s,
+            name: s.title || s.name,
+            image: s.thumbnail || s.image,
+            itemType: 'series',
+          }));
+        allSyllabusItems = [...allSyllabusItems, ...syllabusSeries];
+      }
+
+      setItems(allSyllabusItems);
+      setCachedData('syllabus_catalog_items', allSyllabusItems);
     } catch (error) {
-      console.log('Error loading section items:', error);
+      console.log('Error loading syllabus items:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [sectionKey, sectionTitle, params.id]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -207,7 +174,7 @@ export default function DynamicSectionCatalogScreen() {
     loadData();
   }, [loadData]);
 
-  // Filter items by category tab and search query
+  // Filter items by selected Category Chip & Search Query
   const filteredItems = useMemo(() => {
     let result = items;
 
@@ -253,14 +220,19 @@ export default function DynamicSectionCatalogScreen() {
     if (item.itemType === 'series') {
       router.push(`/series/${item.id}` as any);
     } else if (item.itemType === 'material') {
-      const fileUrl = item.pdfUrl || item.fileUrl || item.url;
-      if (fileUrl) {
+      if (item.pdfUrl || item.fileUrl || item.url) {
+        const fileUrl = item.pdfUrl || item.fileUrl || item.url;
         Linking.openURL(fileUrl).catch((err) => console.error('Failed to open PDF:', err));
       }
     } else {
       router.push(`/explore/folder/${item.id}` as any);
     }
   };
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   const renderCard = ({ item }: { item: any }) => {
     const isMaterial = item.itemType === 'material';
@@ -301,17 +273,17 @@ export default function DynamicSectionCatalogScreen() {
             </View>
 
             <View style={styles.testCardMetaRow}>
-              <Text style={styles.testCardMetaTextBold}>{sectionTitle}</Text>
+              <Text style={styles.testCardMetaTextBold}>Syllabus Blueprint</Text>
               <Text style={styles.testCardMetaDot}>•</Text>
               <Text style={styles.testCardMetaText}>
-                {item.type || 'Document'}
+                {item.type || 'Official PDF'}
               </Text>
             </View>
           </View>
 
           {/* Right: Pill Button */}
           <View style={styles.resumePillBtn}>
-            <Text style={styles.resumePillBtnText}>View</Text>
+            <Text style={styles.resumePillBtnText}>View PDF</Text>
             <ChevronRight size={13} color="#FFFFFF" strokeWidth={3} />
           </View>
         </TouchableOpacity>
@@ -342,7 +314,7 @@ export default function DynamicSectionCatalogScreen() {
           )}
           <View style={styles.newBadge}>
             <View style={styles.newBadgeDot} />
-            <Text style={styles.newBadgeText}>{isFree ? 'Free' : sectionTitle}</Text>
+            <Text style={styles.newBadgeText}>Syllabus</Text>
           </View>
         </View>
 
@@ -371,7 +343,7 @@ export default function DynamicSectionCatalogScreen() {
 
           <View style={styles.btnRow}>
             <View style={styles.buyBtn}>
-              <Text style={styles.buyBtnText}>{isFree ? 'Open' : 'Explore'}</Text>
+              <Text style={styles.buyBtnText}>Open</Text>
             </View>
           </View>
         </View>
@@ -395,9 +367,9 @@ export default function DynamicSectionCatalogScreen() {
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {sectionTitle}
+              Exam Syllabus
             </Text>
-            <Text style={styles.headerSub}>Explore Content & Resources</Text>
+            <Text style={styles.headerSub}>Official Syllabus & Blueprint</Text>
           </View>
         </View>
 
@@ -419,7 +391,7 @@ export default function DynamicSectionCatalogScreen() {
           <Search size={18} color="#002D72" style={{ marginRight: 8 }} />
           <TextInput
             style={styles.searchInput}
-            placeholder={`Search in ${sectionTitle}...`}
+            placeholder="Search syllabus & blueprints..."
             placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -435,7 +407,7 @@ export default function DynamicSectionCatalogScreen() {
           <FlatList
             horizontal
             showsHorizontalScrollIndicator={false}
-            data={[{ id: 'ALL', name: 'All' }, ...categories]}
+            data={[{ id: 'ALL', name: 'All Syllabus' }, ...categories]}
             keyExtractor={(cat) => cat.id}
             contentContainerStyle={styles.categoryChipsList}
             renderItem={({ item: cat }) => {
@@ -467,7 +439,7 @@ export default function DynamicSectionCatalogScreen() {
 
       {/* Section Sub-heading */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{sectionTitle.toUpperCase()}</Text>
+        <Text style={styles.sectionTitle}>SYLLABUS & STUDY OUTLINES</Text>
         <Text style={styles.sectionCount}>{filteredItems.length} Available</Text>
       </View>
 
@@ -475,7 +447,7 @@ export default function DynamicSectionCatalogScreen() {
       {loading && items.length === 0 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#0072FF" />
-          <Text style={styles.loadingText}>Loading {sectionTitle}...</Text>
+          <Text style={styles.loadingText}>Loading syllabus outlines...</Text>
         </View>
       ) : (
         <FlatList
@@ -498,12 +470,12 @@ export default function DynamicSectionCatalogScreen() {
                 <FileText size={32} color="#002D72" />
               </View>
               <Text style={styles.emptyTitle}>
-                {searchQuery ? `No ${sectionTitle} Found` : 'Coming Soon 🚀'}
+                {searchQuery ? 'No Syllabus Found' : 'Coming Soon 📚'}
               </Text>
               <Text style={styles.emptyText}>
                 {searchQuery
-                  ? `No items match "${searchQuery}". Try a different keyword.`
-                  : `${sectionTitle} study materials and resources are being updated. Check back shortly!`}
+                  ? `No syllabus matches "${searchQuery}". Try a different keyword.`
+                  : 'Official syllabus outlines, mark schemes, and exam pattern blueprints will be live soon!'}
               </Text>
             </View>
           }
