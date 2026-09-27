@@ -8,20 +8,23 @@ import { getApiBaseUrl } from '../../../services/api';
 export default function CategoryExploreScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const [subcategories, setSubcategories] = useState<any[]>([]);
+  const [exams, setExams] = useState<any[]>([]);
   const [category, setCategory] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchCategoryAndSubcategories = async () => {
+    const fetchCategoryAndExams = async () => {
       try {
-        const catRes = await fetch(`${getApiBaseUrl()}/categories/${id}`);
-        const catData = await catRes.json();
-        setCategory(catData);
-
-        const subRes = await fetch(`${getApiBaseUrl()}/subcategories?categoryId=${id}`);
-        const subData = await subRes.json();
-        setSubcategories(subData);
+        const [catRes, examsRes] = await Promise.all([
+          fetch(`${getApiBaseUrl()}/categories/${id}`).then((r) => r.json()).catch(() => null),
+          fetch(`${getApiBaseUrl()}/exams?categoryId=${id}&active=true`).then((r) => r.json()).catch(() => []),
+        ]);
+        setCategory(catRes);
+        // Filter exams matching category if endpoint returns all
+        const categoryExams = Array.isArray(examsRes) 
+          ? examsRes.filter((e: any) => e.categoryId === id)
+          : [];
+        setExams(categoryExams);
       } catch (err) {
         console.error(err);
       } finally {
@@ -30,7 +33,7 @@ export default function CategoryExploreScreen() {
     };
     
     if (id) {
-      fetchCategoryAndSubcategories();
+      fetchCategoryAndExams();
     }
   }, [id]);
 
@@ -55,21 +58,21 @@ export default function CategoryExploreScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Choose a Subcategory</Text>
-          <Text style={styles.sectionCount}>{subcategories.length} Topics</Text>
+          <Text style={styles.sectionTitle}>Available Exams</Text>
+          <Text style={styles.sectionCount}>{exams.length} Exams</Text>
         </View>
 
-        {subcategories.length === 0 ? (
+        {exams.length === 0 ? (
           <View style={styles.emptyCard}>
             <Folder color="#CBD5E1" size={36} />
-            <Text style={styles.emptyText}>No subcategories available yet.</Text>
+            <Text style={styles.emptyText}>No exams available yet in this category.</Text>
           </View>
         ) : (
-          subcategories.map((sub: any) => (
+          exams.map((exam: any) => (
             <TouchableOpacity 
-              key={sub.id} 
+              key={exam.id} 
               style={styles.card}
-              onPress={() => router.push(`/explore/subcategory/${sub.id}`)}
+              onPress={() => router.push(`/explore/folder/${exam.id}` as any)}
               activeOpacity={0.8}
             >
               <View style={styles.cardLeft}>
@@ -77,8 +80,8 @@ export default function CategoryExploreScreen() {
                   <Folder color="#0072FF" size={22} />
                 </View>
                 <View>
-                  <Text style={styles.cardTitle}>{sub.name}</Text>
-                  <Text style={styles.cardSub}>Explore test series & materials</Text>
+                  <Text style={styles.cardTitle}>{exam.name}</Text>
+                  <Text style={styles.cardSub}>Explore tests & study packages</Text>
                 </View>
               </View>
               <ChevronRight color="#94A3B8" size={18} />

@@ -14,21 +14,22 @@ export default function AttemptsHistoryScreen() {
     setLoading(true);
     const data = await fetchUserAttempts();
     if (data && Array.isArray(data)) {
+      const completedData = data.filter(a => a.status === 'SUBMITTED' || a.status === 'COMPLETED');
       const grouped: Record<string, any[]> = {};
-      data.forEach(a => {
+      completedData.forEach(a => {
         if (!grouped[a.testId]) grouped[a.testId] = [];
         grouped[a.testId].push(a);
       });
       let processed: any[] = [];
       Object.keys(grouped).forEach(testId => {
-        const testAttempts = grouped[testId].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        const testAttempts = grouped[testId].sort((a, b) => new Date(a.startedAt || a.createdAt).getTime() - new Date(b.startedAt || b.createdAt).getTime());
         testAttempts.forEach((a, idx) => {
           a.attemptNumber = idx + 1;
           a.totalAttempts = testAttempts.length;
           processed.push(a);
         });
       });
-      processed.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      processed.sort((a, b) => new Date(b.startedAt || b.createdAt).getTime() - new Date(a.startedAt || a.createdAt).getTime());
       
       setAttempts(processed);
     }

@@ -36,7 +36,8 @@ import {
   ZoomIn,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import { submitAttempt, getApiBaseUrl, fetchUserAttempts, startAttempt, syncAttempt, fetchAttemptDetails, getCachedData } from '../../services/api';
+import { supabase } from '../../lib/supabase';
+import { submitAttempt, getApiBaseUrl, fetchUserAttempts, startAttempt, syncAttempt, fetchAttemptDetails, getCachedData, getAuthToken } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -133,45 +134,17 @@ export default function MobileTestAttemptScreen() {
 
         let data: any = null;
 
-        // 1. Try to load from ultra-fast cache first for UI structure (Questions/Test Info)
-        if (!isReview) {
-          try {
-            const cached = await getCachedData<any>(`test_start_${id}`);
-            if (cached && cached.questions && cached.questions.length > 0) {
-              data = cached;
-              
-              // Only load questions and test metadata from cache, explicitly ignore the attempt state
-              if (data.test) setTestInfo(data.test);
-              if (data.questions) {
-                const formatted = data.questions.map((q: any) => {
-                  const ansLetter = q.correctAnswer;
-                  const ansIndex = ansLetter === 'B' ? 1 : ansLetter === 'C' ? 2 : ansLetter === 'D' ? 3 : 0;
-                  return {
-                    id: q.id, textEn: q.questionEn || q.questionHi || 'Question', textHi: q.questionHi || q.questionEn || 'Question',
-                    optionsEn: [q.optAEn || q.optAHi, q.optBEn || q.optBHi, q.optCEn || q.optCHi, q.optDEn || q.optDHi],
-                    optionsHi: [q.optAHi || q.optAEn, q.optBHi || q.optBEn, q.optCHi || q.optCEn, q.optDHi || q.optDEn],
-                    correctAnswer: ansIndex, marks: Number(q.marks) || 1, negativeMark: Number(q.negativeMark) || 0,
-                    questionImageUrl: q.questionImageUrl || null, optAImageUrl: q.optAImageUrl || null,
-                    optBImageUrl: q.optBImageUrl || null, optCImageUrl: q.optCImageUrl || null, optDImageUrl: q.optDImageUrl || null
-                  };
-                });
-                setQuestions(formatted);
-              }
-              console.log('Loaded test structural data from cache instantly!');
-            }
-          } catch (e) {}
-        }
-
-        // 2. ALWAYS fetch from network to create/resume the REAL attempt
+        // ALWAYS fetch from network to verify limits & create/resume the REAL attempt
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        const token = await (async () => {
+        let token = getAuthToken();
+        if (!token) {
           try {
-            const AsyncStorageModule = require('@react-native-async-storage/async-storage');
-            const stored = await AsyncStorageModule.default.getItem('jhartest_auth_token');
-            return stored || null;
-          } catch { return null; }
-        })();
+            const { data: sessionData } = await supabase.auth.getSession();
+            token = sessionData?.session?.access_token || null;
+          } catch {}
+        }
         if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (user?.id) headers['x-user-id'] = user.id;
 
         const combinedRes = await fetch(`${baseUrl}/tests/${id}/start`, {
           method: 'POST',
@@ -182,9 +155,19 @@ export default function MobileTestAttemptScreen() {
           }),
         });
 
-        if (combinedRes.ok) {
-          data = await combinedRes.json();
+        if (!combinedRes.ok) {
+          const errData = await combinedRes.json().catch(() => ({}));
+          const errorMsg = errData.error || 'Cannot start test session. Active internet connection required.';
+          Alert.alert(
+            'Cannot Start Exam',
+            errorMsg,
+            [{ text: 'OK', onPress: () => router.back() }]
+          );
+          setLoading(false);
+          return;
         }
+
+        data = await combinedRes.json();
 
         if (data) {
 
@@ -244,32 +227,51 @@ export default function MobileTestAttemptScreen() {
           }
 
           // ── Process review stats ──
-          if (isReview && data.reviewStats) {
-            const rs = data.reviewStats;
-            if (rs.answers) {
+          if (isReview && (data.reviewStats || data.attempt)) {
+            const rs = data.reviewStats || {};
+            let rawAnswers = rs.answers;
+            if (!rawAnswers && data.attempt?.savedState) {
+              if (typeof data.attempt.savedState === 'string') {
+                try {
+                  const parsed = JSON.parse(data.attempt.savedState);
+                  rawAnswers = parsed.answers || parsed;
+                } catch {}
+              } else if (typeof data.attempt.savedState === 'object') {
+                rawAnswers = data.attempt.savedState.answers || data.attempt.savedState;
+              }
+            }
+
+            if (rawAnswers && typeof rawAnswers === 'object') {
               const parsedAnswers: Record<string, number> = {};
-              for (const [qId, val] of Object.entries(rs.answers)) {
+              for (const [qId, val] of Object.entries(rawAnswers)) {
                 if (typeof val === 'string') {
-                  const upper = val.toUpperCase();
+                  const upper = val.toUpperCase().trim();
                   if (upper === 'A') parsedAnswers[qId] = 0;
                   else if (upper === 'B') parsedAnswers[qId] = 1;
                   else if (upper === 'C') parsedAnswers[qId] = 2;
                   else if (upper === 'D') parsedAnswers[qId] = 3;
-                  else parsedAnswers[qId] = Number(val) || 0;
+                  else if (!isNaN(Number(val))) parsedAnswers[qId] = Number(val);
                 } else if (typeof val === 'number') {
                   parsedAnswers[qId] = val;
                 }
               }
               setAnswers(parsedAnswers);
             }
+
+            const correctVal = rs.correct ?? data.attempt?.correct ?? 0;
+            const incorrectVal = rs.incorrect ?? data.attempt?.incorrect ?? 0;
+            const attemptedVal = correctVal + incorrectVal;
+            const calculatedAccuracy = attemptedVal > 0 ? Math.round((correctVal / attemptedVal) * 100) : 0;
+            const totalMarksVal = rs.totalMarks || data.test?.totalMarks || data.attempt?.totalMarks || 100;
+
             setTestResult({
-              score: Number(rs.score || 0),
-              totalMarks: rs.totalMarks || 0,
-              correct: rs.correct || 0,
-              incorrect: rs.incorrect || 0,
-              unanswered: rs.unanswered || 0,
-              accuracy: rs.accuracy || 0,
-              timeTaken: rs.timeTaken || 0,
+              score: Number(rs.score ?? data.attempt?.score ?? 0),
+              totalMarks: totalMarksVal,
+              correct: correctVal,
+              incorrect: incorrectVal,
+              unanswered: rs.unanswered ?? data.attempt?.unanswered ?? 0,
+              accuracy: rs.accuracy !== undefined ? rs.accuracy : calculatedAccuracy,
+              timeTaken: rs.timeTaken ?? data.attempt?.timeTaken ?? 0,
               rank: rs.rank || 1,
               totalCandidates: rs.totalCandidates || 1,
               percentile: rs.percentile || 100,
@@ -305,46 +307,14 @@ export default function MobileTestAttemptScreen() {
               );
             }
           }
-        } else {
-          // Fallback: if combined endpoint not available, try legacy individual calls
-          console.warn('Combined endpoint failed, falling back to individual calls');
-          const [tRes, qRes] = await Promise.all([
-            fetch(`${baseUrl}/tests/${id}`).catch(() => null),
-            fetch(`${baseUrl}/tests/${id}/questions`).catch(() => null),
-          ]);
-          if (tRes && tRes.ok) {
-            const t = await tRes.json();
-            setTestInfo(t);
-            if (t.duration) setTimeLeft(t.duration * 60);
-          }
-          if (qRes && qRes.ok) {
-            const qList = await qRes.json();
-            if (Array.isArray(qList) && qList.length > 0) {
-              const formatted = qList.map((q: any) => {
-                const ansLetter = (q.correctAnswer || 'A').toUpperCase().trim();
-                const ansIndex = ansLetter === 'B' ? 1 : ansLetter === 'C' ? 2 : ansLetter === 'D' ? 3 : 0;
-                return {
-                  id: q.id, sectionName: q.sectionName || 'General',
-                  textEn: q.questionEn || q.questionHi || 'Question',
-                  textHi: q.questionHi || q.questionEn || 'Question',
-                  optionsEn: [q.optAEn || 'A', q.optBEn || 'B', q.optCEn || 'C', q.optDEn || 'D'],
-                  optionsHi: [q.optAHi || 'A', q.optBHi || 'B', q.optCHi || 'C', q.optDHi || 'D'],
-                  correctAnswer: ansIndex,
-                  marks: q.marks != null ? Number(q.marks) : 1,
-                  negativeMark: q.negativeMark != null ? Number(q.negativeMark) : 0,
-                  explanationEn: q.explanationEn || '', explanationHi: q.explanationHi || '',
-                  questionImageUrl: q.questionImageUrl || null,
-                  optAImageUrl: q.optAImageUrl || null, optBImageUrl: q.optBImageUrl || null,
-                  optCImageUrl: q.optCImageUrl || null, optDImageUrl: q.optDImageUrl || null,
-                  explanationImageUrl: q.explanationImageUrl || null,
-                };
-              });
-              setQuestions(formatted);
-            }
-          }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error loading mobile test:', err);
+        Alert.alert(
+          'Connection Error',
+          'An active internet connection is required to start and verify this exam. Please check your network and try again.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
       } finally {
         setLoading(false);
       }

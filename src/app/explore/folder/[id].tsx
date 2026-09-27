@@ -1083,14 +1083,14 @@ export default function FolderExploreScreen() {
             </View>
 
             {[...folder.testSeries].sort((a: any, b: any) => {
-              const aIsDemo = Boolean(a.isDemo || a.isFree || (a.title && a.title.toLowerCase().includes('demo')));
-              const bIsDemo = Boolean(b.isDemo || b.isFree || (b.title && b.title.toLowerCase().includes('demo')));
+              const aIsDemo = Boolean(a.isDemo || (a.title && a.title.toLowerCase().includes('demo')) || a.category === 'demo');
+              const bIsDemo = Boolean(b.isDemo || (b.title && b.title.toLowerCase().includes('demo')) || b.category === 'demo');
               if (aIsDemo && !bIsDemo) return 1;
               if (!aIsDemo && bIsDemo) return -1;
               return 0;
             }).map((ts: any) => {
-              const isDemo = Boolean(ts.isDemo || ts.isFree || (ts.title && ts.title.toLowerCase().includes('demo')));
-              const isUnlocked = hasAccess || isDemo || purchasedSeriesIds.includes(ts.id);
+              const isDemo = Boolean(ts.isDemo || (ts.title && ts.title.toLowerCase().includes('demo')) || ts.category === 'demo');
+              const isUnlocked = !folder.isPaid || hasAccess || isDemo || purchasedSeriesIds.includes(ts.id);
               const isAttemptCompleted =
                 ts.userAttemptsCount >= (ts.maxAttempts || 2) && ts.latestAttemptId;
               const hasAttempts = ts.userAttemptsCount > 0;

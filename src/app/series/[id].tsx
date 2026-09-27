@@ -24,6 +24,7 @@ import {
   BookOpen,
   RotateCw,
   ClipboardCheck,
+  ChevronRight,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getApiBaseUrl, fetchUserAttempts, getCachedData, setCachedData, prefetchMultipleTests } from '../../services/api';
@@ -148,14 +149,16 @@ export default function SeriesDetailScreen() {
   const matchingAttempts = userAttempts.filter(
     (a: any) => a.testId === activeTest?.id || a.test?.id === activeTest?.id
   );
-  const completedAttempts = matchingAttempts.filter((a: any) => a.status === 'SUBMITTED');
+  const completedAttempts = matchingAttempts
+    .filter((a: any) => a.status === 'SUBMITTED' || a.status === 'COMPLETED')
+    .sort((a: any, b: any) => new Date(a.startedAt || a.createdAt).getTime() - new Date(b.startedAt || b.createdAt).getTime());
   const inProgressAttempt = matchingAttempts.find((a: any) => a.status === 'IN_PROGRESS');
   
   const attemptCount = completedAttempts.length;
   const maxAttempts =
     activeTest?.maxAttempts !== undefined ? activeTest.maxAttempts : globalMaxAttempts;
   const isExhausted = maxAttempts > 0 && attemptCount >= maxAttempts;
-  const latestCompletedAttemptId = completedAttempts[0]?.id;
+  const latestCompletedAttemptId = completedAttempts[completedAttempts.length - 1]?.id;
 
   const handleStartActiveTest = () => {
     if (!activeTest) return;
@@ -409,6 +412,47 @@ export default function SeriesDetailScreen() {
               </View>
             </View>
 
+            {/* Completed Attempts List (Attempt 1 Result, Attempt 2 Result, etc.) */}
+            {completedAttempts.length > 0 && (
+              <View style={styles.attemptsResultSection}>
+                <Text style={styles.attemptsResultSectionTitle}>Your Completed Attempts</Text>
+                <View style={styles.attemptsResultList}>
+                  {completedAttempts.map((attempt: any, idx: number) => {
+                    const attemptNum = idx + 1;
+                    const scoreVal = attempt.score !== undefined && attempt.score !== null ? Number(attempt.score) : 0;
+                    const totalMarksVal = activeTest?.totalMarks || 100;
+                    return (
+                      <TouchableOpacity
+                        key={attempt.id}
+                        style={styles.attemptCardItem}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          router.push(
+                            `/test/${activeTest.id}?viewMode=review&attemptId=${attempt.id}`
+                          );
+                        }}
+                      >
+                        <View style={styles.attemptCardLeft}>
+                          <View style={styles.attemptCardBadge}>
+                            <Award size={13} color="#00C853" />
+                            <Text style={styles.attemptCardBadgeText}>Attempt {attemptNum} Result</Text>
+                          </View>
+                          <Text style={styles.attemptCardScore}>
+                            Score: <Text style={styles.attemptCardScoreBold}>{scoreVal}</Text> / {totalMarksVal}
+                          </Text>
+                        </View>
+
+                        <View style={styles.attemptCardBtn}>
+                          <Text style={styles.attemptCardBtnText}>View Result</Text>
+                          <ChevronRight size={14} color="#00C853" />
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
             {/* Action Buttons - Directly After Attempts Box */}
             <View style={styles.actionRow}>
               <TouchableOpacity
@@ -431,11 +475,11 @@ export default function SeriesDetailScreen() {
                 <PlayCircle size={19} color="#FFFFFF" />
                 <Text style={styles.actionStartBtnText}>
                   {isExhausted
-                    ? 'View Result'
+                    ? 'View Latest Result'
                     : inProgressAttempt
                     ? 'Resume Test'
                     : attemptCount > 0
-                    ? 'Re-Attempt Test'
+                    ? `Re-Attempt (${attemptCount + 1}/${maxAttempts})`
                     : 'Start Test'}
                 </Text>
               </TouchableOpacity>
@@ -639,6 +683,76 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#64748B',
     marginTop: 1,
+  },
+  attemptsResultSection: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 10,
+  },
+  attemptsResultSectionTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#334155',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  attemptsResultList: {
+    gap: 8,
+  },
+  attemptCardItem: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  attemptCardLeft: {
+    gap: 4,
+  },
+  attemptCardBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  attemptCardBadgeText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  attemptCardScore: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  attemptCardScoreBold: {
+    fontWeight: '800',
+    color: '#00C853',
+  },
+  attemptCardBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    gap: 2,
+  },
+  attemptCardBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#00C853',
   },
   actionRow: {
     flexDirection: 'row',
