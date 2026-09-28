@@ -89,12 +89,14 @@ export default function FreeTestsCatalogScreen() {
 
       let allFreeItems: any[] = [];
 
-      // Add Free Folders (Explicitly assigned to FREE_TEST section)
+      // Add Free Folders (Exclude Syllabus, Chapter Wise, etc.)
       if (foldersRes.status === 'fulfilled' && foldersRes.value?.data) {
         const folderData = Array.isArray(foldersRes.value.data) ? foldersRes.value.data : [];
         const freeFolders = folderData.filter((f: any) => {
           const sec = (f.icon || '').toUpperCase();
-          return sec === 'FREE_TEST';
+          if (sec === 'FREE_TEST') return true;
+          if (sec === 'SYLLABUS' || sec === 'CHAPTER_WISE' || sec === 'UNASSIGNED' || sec === 'PAID_SERIES' || !sec) return false;
+          return f.isPaid === false;
         }).map((f: any) => ({
           ...f,
           itemType: 'folder',
@@ -102,12 +104,15 @@ export default function FreeTestsCatalogScreen() {
         allFreeItems = [...allFreeItems, ...freeFolders];
       }
 
-      // Add Free Test Series (Explicitly assigned to FREE_TEST category)
+      // Add Free Test Series
       if (seriesRes.status === 'fulfilled' && seriesRes.value?.data) {
         const seriesData = Array.isArray(seriesRes.value.data) ? seriesRes.value.data : [];
-        const explicitlyLinkedSeries = seriesData.filter(
-          (s: any) => (s.category || '').toUpperCase() === 'FREE_TEST'
-        ).map((s: any) => ({
+        const explicitlyLinkedSeries = seriesData.filter((s: any) => {
+          const cat = (s.category || '').toUpperCase();
+          if (cat === 'FREE_TEST') return true;
+          if (cat === 'SYLLABUS' || cat === 'CHAPTER_WISE' || cat === 'UNASSIGNED' || cat === 'PAID_SERIES' || !cat) return false;
+          return s.isFree === true;
+        }).map((s: any) => ({
           ...s,
           name: s.title || s.name,
           image: s.thumbnail || s.image,
@@ -116,12 +121,15 @@ export default function FreeTestsCatalogScreen() {
         allFreeItems = [...allFreeItems, ...explicitlyLinkedSeries];
       }
 
-      // Add Free Materials / PDFs (Explicitly assigned to FREE_TEST type)
+      // Add Free Materials / PDFs
       if (materialsRes.status === 'fulfilled' && materialsRes.value?.data) {
         const materialData = Array.isArray(materialsRes.value.data) ? materialsRes.value.data : [];
-        const freeMaterials = materialData.filter(
-          (m: any) => (m.type || '').toUpperCase() === 'FREE_TEST'
-        ).map((m: any) => ({
+        const freeMaterials = materialData.filter((m: any) => {
+          const type = (m.type || '').toUpperCase();
+          if (type === 'FREE_TEST') return true;
+          if (type === 'SYLLABUS' || type === 'CHAPTER_WISE' || type === 'UNASSIGNED' || type === 'PAID_SERIES' || !type) return false;
+          return m.isFree === true;
+        }).map((m: any) => ({
           ...m,
           name: m.title || m.name,
           image: m.thumbnail || m.image,
