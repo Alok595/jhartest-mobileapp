@@ -92,7 +92,10 @@ export default function ProfileScreen() {
           {user ? (
             <>
               <Text style={styles.name}>{user.name}</Text>
-              <Text style={styles.phone}>{user.phone || user.email}</Text>
+              <View style={styles.contactContainer}>
+                {user.phone ? <Text style={styles.phoneText}>{user.phone}</Text> : null}
+                {user.email ? <Text style={styles.emailText}>{user.email}</Text> : null}
+              </View>
               <View style={styles.roleBadge}>
                 <ShieldCheck size={12} color="#0072FF" />
                 <Text style={styles.roleText}>
@@ -124,15 +127,15 @@ export default function ProfileScreen() {
           </View>
           <View style={[styles.statBox, styles.statBorder]}>
             <Text style={[styles.statValue, { color: '#0072FF' }]}>
-              {stats?.accuracy ?? (user ? '0%' : '--')}
+              {stats?.seriesEnrolled ?? (user ? 0 : 0)}
             </Text>
-            <Text style={styles.statLabel}>Avg Accuracy</Text>
+            <Text style={styles.statLabel}>Series Bought</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={[styles.statValue, { color: '#EA580C' }]}>
-              {stats?.stateRank ?? (user ? 'Rank --' : '--')}
+            <Text style={[styles.statValue, { color: '#00C853' }]}>
+              {stats?.questionsSolved ?? (user ? 0 : 0)}
             </Text>
-            <Text style={styles.statLabel}>State Rank</Text>
+            <Text style={styles.statLabel}>Questions Solved</Text>
           </View>
         </View>
 
@@ -300,6 +303,22 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     color: '#0F172A',
+  },
+  contactContainer: {
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  phoneText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  emailText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
   },
   phone: {
     fontSize: 13,

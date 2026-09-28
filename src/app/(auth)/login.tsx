@@ -15,7 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Lock, Mail, User, Eye, EyeOff, CheckSquare, Square, Sparkles } from 'lucide-react-native';
+import { ArrowLeft, Mail, Phone, User, Sparkles } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 
@@ -35,73 +35,86 @@ function GoogleIcon({ size = 20 }: { size?: number }) {
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, loginWithGoogle, registerUser } = useAuth();
+  const { directLoginOrSendOtp, verifyLoginOtp, loginWithGoogle } = useAuth();
 
-  const [mode, setMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [name, setName] = useState('');
   
+  // OTP Verification Mode (only shown for 1st time new users)
+  const [isOtpStep, setIsOtpStep] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [otpSentEmail, setOtpSentEmail] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   const isValidEmail = (text: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text.trim());
   };
 
-  const handleLogin = async () => {
-    if (!email.trim()) {
+  const handleContinue = async () => {
+    const cleanEmail = email.trim();
+    const cleanPhone = phone.trim();
+
+    if (!cleanEmail) {
       Alert.alert('Required', 'Please enter your email address');
       return;
     }
-    if (!isValidEmail(email)) {
+
+    if (!isValidEmail(cleanEmail)) {
       Alert.alert('Invalid Email', 'Please enter a valid email address');
       return;
     }
-    if (!password) {
-      Alert.alert('Required', 'Please enter your password');
+
+    if (!cleanPhone || cleanPhone.replace(/\D/g, '').length < 10) {
+      Alert.alert('Invalid Mobile', 'Please enter a valid 10-digit mobile number');
       return;
     }
 
     setLoading(true);
-    const res = await login(email.trim(), password);
+    const res = await directLoginOrSendOtp({
+      email: cleanEmail,
+      phone: cleanPhone,
+      name: name.trim() || undefined,
+    });
     setLoading(false);
 
     if (res.success) {
-      router.replace('/(tabs)');
+      if (res.isNewUser === false) {
+        // Returning student -> Direct instant login!
+        router.replace('/(tabs)');
+      } else {
+        // New student -> Show OTP verification step
+        setOtpSentEmail(cleanEmail);
+        setIsOtpStep(true);
+        setResendCooldown(30);
+      }
     } else {
-      Alert.alert('Login Failed', res.error || 'Invalid credentials or connection error.');
+      Alert.alert('Login Notice', res.error || 'Could not log in. Please try again.');
     }
   };
 
-  const handleRegister = async () => {
-    if (!name.trim()) {
-      Alert.alert('Required', 'Please enter your full name');
-      return;
-    }
-    if (!email.trim() || !isValidEmail(email)) {
-      Alert.alert('Required', 'Please enter a valid email address');
-      return;
-    }
-    if (!password || password.length < 6) {
-      Alert.alert('Required', 'Please enter a password of at least 6 characters');
+  const handleVerifyOtp = async () => {
+    if (!otp.trim() || otp.trim().length < 6) {
+      Alert.alert('Required', 'Please enter the 6-digit OTP code sent to your email');
       return;
     }
 
     setLoading(true);
-    const res = await registerUser({
-      name: name.trim(),
-      email: email.trim(),
-      password,
+    const res = await verifyLoginOtp({
+      email: otpSentEmail,
+      phone: phone.trim() || undefined,
+      otp: otp.trim(),
+      name: name.trim() || undefined,
     });
     setLoading(false);
 
     if (res.success) {
       router.replace('/(tabs)');
     } else {
-      Alert.alert('Registration Failed', res.error || 'Could not register. Please try again.');
+      Alert.alert('Invalid OTP', res.error || 'The code you entered is incorrect or expired.');
     }
   };
 
@@ -128,8 +141,8 @@ export default function LoginScreen() {
       >
         <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
           <View style={styles.headerNavRow}>
-            {mode === 'REGISTER' ? (
-              <TouchableOpacity onPress={() => setMode('LOGIN')} style={styles.backButton} activeOpacity={0.7}>
+            {isOtpStep ? (
+              <TouchableOpacity onPress={() => setIsOtpStep(false)} style={styles.backButton} activeOpacity={0.7}>
                 <ArrowLeft color="#FFFFFF" size={24} />
               </TouchableOpacity>
             ) : (
@@ -147,31 +160,6 @@ export default function LoginScreen() {
           </View>
           
           <Text style={styles.headerSubHeading}>prep smarter, score higher</Text>
-
-          {/* Segmented Switcher */}
-          <View style={styles.tabContainer}>
-            <TouchableOpacity 
-              style={styles.tab} 
-              onPress={() => setMode('LOGIN')}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.tabText, mode === 'LOGIN' && styles.activeTabText]}>
-                Sign In
-              </Text>
-              {mode === 'LOGIN' && <View style={styles.activeTabIndicator} />}
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.tab} 
-              onPress={() => setMode('REGISTER')}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.tabText, mode === 'REGISTER' && styles.activeTabText]}>
-                Sign Up
-              </Text>
-              {mode === 'REGISTER' && <View style={styles.activeTabIndicator} />}
-            </TouchableOpacity>
-          </View>
         </SafeAreaView>
       </LinearGradient>
 
@@ -187,104 +175,12 @@ export default function LoginScreen() {
           bounces={false}
         >
           <View style={styles.formContainer}>
-            <Text style={styles.formTitle}>
-              {mode === 'LOGIN' ? 'Welcome Back!' : 'Create Your Account'}
-            </Text>
-            <Text style={styles.formSubtitle}>
-              {mode === 'LOGIN' 
-                ? 'Sign in to access your Jharkhand test series & study materials' 
-                : 'Join thousands of students preparing for JPSC & JSSC exams'}
-            </Text>
-
-            <View style={styles.inputsWrapper}>
-              {mode === 'REGISTER' && (
-                <View style={styles.inputContainer}>
-                  <User size={20} color="#0072FF" style={styles.inputIcon} />
-                  <TextInput
-                    placeholder="Full Name"
-                    placeholderTextColor="#94A3B8"
-                    value={name}
-                    onChangeText={setName}
-                    style={styles.input}
-                  />
-                </View>
-              )}
-
-              <View style={styles.inputContainer}>
-                <Mail size={20} color="#0072FF" style={styles.inputIcon} />
-                <TextInput
-                  placeholder="Email Address"
-                  placeholderTextColor="#94A3B8"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={styles.input}
-                />
-              </View>
-
-              <View style={styles.inputContainer}>
-                <Lock size={20} color="#0072FF" style={styles.inputIcon} />
-                <TextInput
-                  placeholder="Password"
-                  placeholderTextColor="#94A3B8"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  style={styles.input}
-                />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                  {showPassword ? <EyeOff size={20} color="#64748B" /> : <Eye size={20} color="#64748B" />}
-                </TouchableOpacity>
-              </View>
-
-              {mode === 'LOGIN' && (
-                <View style={styles.optionsRow}>
-                  <TouchableOpacity style={styles.rememberBtn} onPress={() => setRemember(!remember)}>
-                    {remember ? <CheckSquare size={16} color="#0072FF" /> : <Square size={16} color="#94A3B8" />}
-                    <Text style={styles.rememberText}>Remember Password</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
-                    <Text style={styles.forgetText}>Forgot Password?</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Action Button with Logo Gradient */}
-              <TouchableOpacity 
-                activeOpacity={0.9}
-                onPress={mode === 'LOGIN' ? handleLogin : handleRegister}
-                disabled={loading || googleLoading}
-              >
-                <LinearGradient
-                  colors={['#0072FF', '#00C853']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.submitBtn}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.submitBtnText}>
-                      {mode === 'LOGIN' ? 'Sign In' : 'Create Account'}
-                    </Text>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>
-                  Or {mode === 'LOGIN' ? 'sign in' : 'sign up'} with
-                </Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              <View style={styles.socialRow}>
+            {/* Top Google 1-Tap Button */}
+            {!isOtpStep && (
+              <View style={styles.topGoogleSection}>
                 <TouchableOpacity 
                   style={styles.googleBtn} 
-                  activeOpacity={0.8}
+                  activeOpacity={0.85}
                   onPress={handleGoogleAuth}
                   disabled={loading || googleLoading}
                 >
@@ -292,13 +188,150 @@ export default function LoginScreen() {
                     <ActivityIndicator size="small" color="#0072FF" />
                   ) : (
                     <>
-                      <GoogleIcon size={20} />
-                      <Text style={styles.googleBtnText}>Continue with Google</Text>
+                      <GoogleIcon size={22} />
+                      <Text style={styles.googleBtnText}>Continue with Google (1-Tap)</Text>
                     </>
                   )}
                 </TouchableOpacity>
+
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>Or with Email & Mobile</Text>
+                  <View style={styles.dividerLine} />
+                </View>
               </View>
-            </View>
+            )}
+
+            {!isOtpStep ? (
+              <>
+                <Text style={styles.formTitle}>Instant Direct Login</Text>
+                <Text style={styles.formSubtitle}>
+                  Enter your email and mobile number. No password required!
+                </Text>
+
+                <View style={styles.inputsWrapper}>
+                  {/* Email Input (Required) */}
+                  <View style={styles.inputContainer}>
+                    <Mail size={20} color="#0072FF" style={styles.inputIcon} />
+                    <TextInput
+                      placeholder="Email Address (Required)"
+                      placeholderTextColor="#94A3B8"
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      style={styles.input}
+                    />
+                  </View>
+
+                  {/* Mobile Input (Required) */}
+                  <View style={styles.inputContainer}>
+                    <Phone size={20} color="#0072FF" style={styles.inputIcon} />
+                    <TextInput
+                      placeholder="10-Digit Mobile Number (Required)"
+                      placeholderTextColor="#94A3B8"
+                      value={phone}
+                      onChangeText={(val) => setPhone(val.replace(/\D/g, ''))}
+                      keyboardType="phone-pad"
+                      maxLength={10}
+                      style={styles.input}
+                    />
+                  </View>
+
+                  {/* Optional Name (for new students) */}
+                  <View style={styles.inputContainer}>
+                    <User size={20} color="#0072FF" style={styles.inputIcon} />
+                    <TextInput
+                      placeholder="Your Full Name (Optional)"
+                      placeholderTextColor="#94A3B8"
+                      value={name}
+                      onChangeText={setName}
+                      style={styles.input}
+                    />
+                  </View>
+
+                  {/* Action Button */}
+                  <TouchableOpacity 
+                    activeOpacity={0.9}
+                    onPress={handleContinue}
+                    disabled={loading || googleLoading}
+                  >
+                    <LinearGradient
+                      colors={['#0072FF', '#00C853']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.submitBtn}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                      ) : (
+                        <Text style={styles.submitBtnText}>Continue to Tests 🚀</Text>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  <Text style={styles.termsNote}>
+                    🔒 You will stay logged in permanently on this device.
+                  </Text>
+                </View>
+              </>
+            ) : (
+              /* OTP VERIFICATION STEP (1ST TIME USERS ONLY) */
+              <View style={styles.otpStepWrapper}>
+                <View style={styles.otpBadge}>
+                  <Sparkles size={20} color="#0072FF" />
+                </View>
+                <Text style={styles.formTitle}>Enter Verification Code</Text>
+                <Text style={styles.formSubtitle}>
+                  We sent a 6-digit OTP to <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>{otpSentEmail}</Text>. Enter it below to start:
+                </Text>
+
+                <View style={styles.inputsWrapper}>
+                  <View style={[styles.inputContainer, styles.otpInputBox]}>
+                    <TextInput
+                      placeholder="6-digit code"
+                      placeholderTextColor="#94A3B8"
+                      value={otp}
+                      onChangeText={setOtp}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      autoFocus
+                      style={[styles.input, styles.otpText]}
+                    />
+                  </View>
+
+                  <TouchableOpacity 
+                    activeOpacity={0.9}
+                    onPress={handleVerifyOtp}
+                    disabled={loading}
+                  >
+                    <LinearGradient
+                      colors={['#0072FF', '#00C853']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.submitBtn}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                      ) : (
+                        <Text style={styles.submitBtnText}>Verify & Enter App ✅</Text>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    onPress={handleContinue}
+                    disabled={resendCooldown > 0 || loading}
+                    style={styles.resendBtn}
+                  >
+                    <Text style={styles.resendBtnText}>
+                      {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend Verification Code'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -526,6 +559,53 @@ const styles = StyleSheet.create({
   googleBtnText: {
     fontSize: 15,
     color: '#1E293B',
+    fontWeight: '600',
+  },
+  topGoogleSection: {
+    marginBottom: 8,
+  },
+  termsNote: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  otpStepWrapper: {
+    alignItems: 'center',
+  },
+  otpBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  otpInputBox: {
+    justifyContent: 'center',
+    textAlign: 'center',
+    borderWidth: 2,
+    borderColor: '#3B82F6',
+    backgroundColor: '#F8FAFC',
+  },
+  otpText: {
+    textAlign: 'center',
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 6,
+    color: '#0072FF',
+  },
+  resendBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  resendBtnText: {
+    fontSize: 13,
+    color: '#0072FF',
     fontWeight: '600',
   },
 });

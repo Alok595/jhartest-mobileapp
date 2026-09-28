@@ -2,8 +2,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
-import { setAuthToken, getMyProfile } from '../services/api';
+import { setAuthToken, getMyProfile, apiClient } from '../services/api';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -18,8 +19,8 @@ export interface UserProfile {
 
 export interface StudentStats {
   testsAttempted: number;
-  accuracy: string;
-  stateRank: string;
+  seriesEnrolled: number;
+  questionsSolved: number;
 }
 
 interface AuthContextType {
@@ -28,6 +29,8 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  directLoginOrSendOtp: (data: { email?: string; phone?: string; identifier?: string; name?: string }) => Promise<{ success: boolean; isNewUser?: boolean; message?: string; error?: string }>;
+  verifyLoginOtp: (data: { email: string; otp: string; name?: string; phone?: string }) => Promise<{ success: boolean; error?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   registerUser: (data: { name: string; email: string; phone?: string; password?: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -36,6 +39,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
+const STORAGE_TOKEN_KEY = 'jhartest_persisted_token';
+const STORAGE_USER_KEY = 'jhartest_persisted_user';
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<StudentStats | null>(null);
@@ -43,45 +49,84 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      handleSession(session);
-    });
+    // 1. Initial boot: check persistent local storage first (instant 0ms offline-ready login!)
+    const initAuth = async () => {
+      try {
+        const [savedToken, savedUserJson] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_TOKEN_KEY),
+          AsyncStorage.getItem(STORAGE_USER_KEY),
+        ]);
+
+        if (savedToken) {
+          setToken(savedToken);
+          setAuthToken(savedToken);
+          if (savedUserJson) {
+            try {
+              setUser(JSON.parse(savedUserJson));
+            } catch {}
+          }
+          setIsLoading(false);
+          // Refresh fresh profile in background
+          refreshProfile();
+          return;
+        }
+
+        // 2. Check Supabase session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          await handleSession(session);
+        } else {
+          setIsLoading(false);
+        }
+      } catch (e) {
+        setIsLoading(false);
+      }
+    };
+
+    initAuth();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      handleSession(session);
+      if (session) {
+        handleSession(session);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
+  const savePersistedSession = async (userToken: string, userObj: any) => {
+    setToken(userToken);
+    setAuthToken(userToken);
+    setUser(userObj);
+    try {
+      await Promise.all([
+        AsyncStorage.setItem(STORAGE_TOKEN_KEY, userToken),
+        AsyncStorage.setItem(STORAGE_USER_KEY, JSON.stringify(userObj)),
+      ]);
+    } catch (e) {
+      console.warn('Failed to save session locally', e);
+    }
+  };
+
   const handleSession = async (session: any) => {
     if (session?.access_token) {
-      setToken(session.access_token);
-      setAuthToken(session.access_token);
+      const metadata = session.user?.user_metadata || {};
+      const userProfile: UserProfile = {
+        id: session.user.id,
+        name: metadata.full_name || metadata.name || session.user.email?.split('@')[0] || 'Student',
+        email: session.user.email,
+        phone: session.user.phone || metadata.phone,
+        avatar: metadata.avatar_url,
+        role: metadata.role || 'STUDENT',
+      };
 
-      // 1. Instantly populate user from Supabase session (0ms UI reflect!)
-      if (session.user) {
-        const metadata = session.user.user_metadata || {};
-        setUser({
-          id: session.user.id,
-          name: metadata.full_name || metadata.name || session.user.email?.split('@')[0] || 'Student',
-          email: session.user.email,
-          phone: session.user.phone || metadata.phone,
-          avatar: metadata.avatar_url,
-          role: metadata.role || 'STUDENT',
-        });
-        setIsLoading(false);
-      }
+      await savePersistedSession(session.access_token, userProfile);
+      setIsLoading(false);
 
-      // 2. Fetch fresh backend profile & stats in background
+      // Fetch fresh backend profile & stats in background
       await refreshProfile();
     } else {
-      setToken(null);
-      setUser(null);
-      setStats(null);
-      setAuthToken(null);
       setIsLoading(false);
     }
   };
@@ -92,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (profileRes && profileRes.user) {
         setUser(profileRes.user);
         setStats(profileRes.stats);
+        AsyncStorage.setItem(STORAGE_USER_KEY, JSON.stringify(profileRes.user)).catch(() => {});
       }
     } catch (e) {
       console.warn('Failed to refresh profile', e);
@@ -100,9 +146,71 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Passwordless Direct Login (existing student) or Trigger Email OTP (new student)
+   */
+  const directLoginOrSendOtp = async (data: { email?: string; phone?: string; identifier?: string; name?: string }) => {
+    try {
+      setIsLoading(true);
+      const res = await apiClient.post('/auth/login', {
+        identifier: data.identifier?.trim(),
+        email: data.email?.trim(),
+        phone: data.phone?.trim(),
+        name: data.name?.trim(),
+      });
+
+      if (res.data?.success) {
+        // Case 1: Existing student -> Direct login!
+        if (res.data.isNewUser === false && res.data.token) {
+          await savePersistedSession(res.data.token, res.data.user);
+          return { success: true, isNewUser: false };
+        }
+
+        // Case 2: New student -> OTP sent!
+        if (res.data.isNewUser === true) {
+          return { success: true, isNewUser: true, message: res.data.message };
+        }
+      }
+
+      return { success: false, error: res.data?.error || 'Login failed' };
+    } catch (err: any) {
+      return { success: false, error: err?.response?.data?.error || err.message || 'Login failed' };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Verify Login OTP & Auto-Create Account
+   */
+  const verifyLoginOtp = async (data: { email: string; otp: string; name?: string; phone?: string }) => {
+    try {
+      setIsLoading(true);
+      const res = await apiClient.post('/auth/verify-login-otp', {
+        email: data.email.trim(),
+        otp: data.otp.trim(),
+        name: data.name?.trim(),
+        phone: data.phone?.trim(),
+      });
+
+      if (res.data?.success && res.data?.token) {
+        await savePersistedSession(res.data.token, res.data.user);
+        return { success: true };
+      }
+
+      return { success: false, error: res.data?.error || 'Invalid OTP' };
+    } catch (err: any) {
+      return { success: false, error: err?.response?.data?.error || err.message || 'OTP verification failed' };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const login = async (email: string, password?: string) => {
     if (!email.trim()) return { success: false, error: 'Email is required' };
-    if (!password) return { success: false, error: 'Password is required' };
+    if (!password) {
+      return directLoginOrSendOtp({ identifier: email });
+    }
 
     try {
       setIsLoading(true);
@@ -158,12 +266,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               refresh_token: params.refresh_token || '',
             });
           } else if (params.code) {
-             // In case PKCE flow returned a code
              await supabase.auth.exchangeCodeForSession(params.code);
           }
           
-          // Explicitly await the session to be fully loaded and profile fetched
-          // so the user doesn't see a delay in the UI after redirecting
           const { data: { session } } = await supabase.auth.getSession();
           if (session) {
             await handleSession(session);
@@ -181,35 +286,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const registerUser = async (data: { name: string; email: string; phone?: string; password?: string }) => {
-    if (!data.email?.trim()) return { success: false, error: 'Email is required' };
-    if (!data.password) return { success: false, error: 'Password is required' };
-
-    try {
-      setIsLoading(true);
-      const { data: signUpData, error } = await supabase.auth.signUp({
-        email: data.email.trim().toLowerCase(),
-        password: data.password,
-        options: {
-          data: {
-            full_name: data.name,
-            name: data.name,
-            phone: data.phone || '',
-          },
-        },
-      });
-
-      if (error) throw error;
-
-      if (signUpData?.session) {
-        await handleSession(signUpData.session);
-      }
-
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Registration failed' };
-    } finally {
-      setIsLoading(false);
-    }
+    return directLoginOrSendOtp({ identifier: data.email, name: data.name, phone: data.phone });
   };
 
   const logout = async () => {
@@ -218,7 +295,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setStats(null);
     setAuthToken(null);
     try {
-      await supabase.auth.signOut();
+      await Promise.all([
+        AsyncStorage.removeItem(STORAGE_TOKEN_KEY),
+        AsyncStorage.removeItem(STORAGE_USER_KEY),
+        supabase.auth.signOut(),
+      ]);
     } catch (e) {
       console.warn('Logout error', e);
     }
@@ -232,6 +313,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isLoading,
         login,
+        directLoginOrSendOtp,
+        verifyLoginOtp,
         loginWithGoogle,
         registerUser,
         logout,
