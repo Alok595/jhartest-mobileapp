@@ -504,6 +504,7 @@ export default function MobileTestAttemptScreen() {
 
       const attemptRes = await submitAttempt({
         testId: (id as string) || 'test-jssc-cgl-mock-1',
+        attemptId: attemptId || undefined, // Critical: update the exact attempt created on start
         answers: answerPayload,
         timeTaken: timeSpent,
       });

@@ -212,6 +212,7 @@ export const syncAttempt = async (attemptId: string, savedState: any) => {
 
 export const submitAttempt = async (data: {
   testId: string;
+  attemptId?: string;
   answers: { questionId: string; selectedOption: string }[];
   timeTaken: number;
 }) => {
@@ -288,7 +289,7 @@ export const prefetchTestData = async (testId: string): Promise<void> => {
     const res = await fetch(`${baseUrl}/tests/${testId}/start`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ viewMode: 'exam' }),
+      body: JSON.stringify({ viewMode: 'exam', prefetch: true }),
     });
 
     if (res.ok) {
