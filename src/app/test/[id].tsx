@@ -218,11 +218,29 @@ export default function MobileTestAttemptScreen() {
           // ── Process attempt ──
           if (data.attempt) {
             setAttemptId(data.attempt.id);
-            if (!isReview && data.attempt.savedState) {
-              const savedState = data.attempt.savedState as any;
-              if (savedState.answers) setAnswers(savedState.answers);
-              if (savedState.timeLeft) setTimeLeft(savedState.timeLeft);
-              if (savedState.currentQ) setCurrentQ(savedState.currentQ);
+            if (!isReview) {
+              let finalState = null;
+              if (data.attempt.savedState) {
+                let savedState = data.attempt.savedState;
+                if (typeof savedState === 'string') {
+                  try { savedState = JSON.parse(savedState); } catch(e) {}
+                }
+                finalState = savedState;
+              }
+
+              // Load from AsyncStorage
+              try {
+                const localRaw = await AsyncStorage.getItem(`test_state_${data.attempt.id}`);
+                if (localRaw) {
+                  finalState = JSON.parse(localRaw);
+                }
+              } catch (e) {}
+
+              if (finalState) {
+                if (finalState.answers) setAnswers(finalState.answers);
+                if (finalState.timeLeft) setTimeLeft(finalState.timeLeft);
+                if (finalState.currentQ !== undefined) setCurrentQ(finalState.currentQ);
+              }
             }
           }
 
@@ -360,6 +378,13 @@ export default function MobileTestAttemptScreen() {
   // Autosync state
   useEffect(() => {
     if (attemptId && !submitting && viewMode === 'exam') {
+      const stateToSave = { answers, timeLeft, currentQ };
+      AsyncStorage.setItem(`test_state_${attemptId}`, JSON.stringify(stateToSave)).catch(() => {});
+    }
+  }, [answers, currentQ, timeLeft, attemptId, submitting, viewMode]);
+
+  useEffect(() => {
+    if (attemptId && !submitting && viewMode === 'exam') {
       const timeout = setTimeout(() => {
         syncAttempt(attemptId, {
           answers,
@@ -369,7 +394,7 @@ export default function MobileTestAttemptScreen() {
       }, 1000);
       return () => clearTimeout(timeout);
     }
-  }, [answers, currentQ]);
+  }, [answers, currentQ, attemptId, submitting, viewMode]);
 
   // Group sections
   const sections = useMemo(() => {

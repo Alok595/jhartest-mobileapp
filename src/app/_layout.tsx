@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Dimensions, Animated, Easing, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { AuthProvider } from '../context/AuthContext';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -49,6 +49,42 @@ class AppErrorBoundary extends React.Component<
     }
     return this.props.children;
   }
+}
+
+function AuthNavigationLayout() {
+  const { user, token, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const firstSegment = segments[0] as string | undefined;
+    const inAuthGroup = firstSegment === '(auth)' || firstSegment === 'auth';
+
+    if (!token || !user) {
+      if (!inAuthGroup) {
+        router.replace('/(auth)/login');
+      }
+    } else {
+      if (inAuthGroup) {
+        router.replace('/(tabs)');
+      }
+    }
+  }, [user, token, isLoading, segments, router]);
+
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+      <Stack.Screen name="(auth)/forgot-password" options={{ headerShown: false }} />
+      <Stack.Screen name="(auth)/verify-otp" options={{ headerShown: false }} />
+      <Stack.Screen name="(auth)/reset-password" options={{ headerShown: false }} />
+      <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
+      <Stack.Screen name="+not-found" />
+    </Stack>
+  );
 }
 
 export default function RootLayout() {
@@ -230,20 +266,7 @@ export default function RootLayout() {
     <AppErrorBoundary>
       <AuthProvider>
         <View style={{ flex: 1, backgroundColor: '#0B1120' }}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-              name="(auth)/login"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                headerTitle: 'Student Login',
-                headerBackTitle: 'Cancel',
-              }}
-            />
-            <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
-            <Stack.Screen name="+not-found" />
-          </Stack>
+          <AuthNavigationLayout />
 
           {/* High-Performance Amazing Animated Splash Screen */}
           {!isSplashDone && (

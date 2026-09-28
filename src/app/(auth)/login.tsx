@@ -128,9 +128,13 @@ export default function LoginScreen() {
       >
         <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
           <View style={styles.headerNavRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.7}>
-              <ArrowLeft color="#FFFFFF" size={24} />
-            </TouchableOpacity>
+            {mode === 'REGISTER' ? (
+              <TouchableOpacity onPress={() => setMode('LOGIN')} style={styles.backButton} activeOpacity={0.7}>
+                <ArrowLeft color="#FFFFFF" size={24} />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 40 }} />
+            )}
 
             {/* Brand Logo in Header */}
             <View style={styles.brandTitleContainer}>
