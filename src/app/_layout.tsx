@@ -5,6 +5,8 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { checkAppUpdate, AppUpdateInfo } from '../services/updateService';
+import AppUpdateModal from '../components/AppUpdateModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -89,6 +91,9 @@ function AuthNavigationLayout() {
 
 export default function RootLayout() {
   const [isSplashDone, setIsSplashDone] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const splashScaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -255,6 +260,15 @@ export default function RootLayout() {
     // Transition to main app
     const timer = setTimeout(() => {
       finishSplash();
+      // Check for updates non-blocking in background after splash ends
+      checkAppUpdate()
+        .then((info) => {
+          if (info && info.isUpdateAvailable) {
+            setUpdateInfo(info);
+            setShowUpdateModal(true);
+          }
+        })
+        .catch(() => {});
     }, 3400);
 
     return () => {
@@ -267,6 +281,13 @@ export default function RootLayout() {
       <AuthProvider>
         <View style={{ flex: 1, backgroundColor: '#0B1120' }}>
           <AuthNavigationLayout />
+
+          {/* In-App Update Modal (Safe & Non-blocking) */}
+          <AppUpdateModal
+            visible={showUpdateModal}
+            updateInfo={updateInfo}
+            onDismiss={() => setShowUpdateModal(false)}
+          />
 
           {/* High-Performance Amazing Animated Splash Screen */}
           {!isSplashDone && (

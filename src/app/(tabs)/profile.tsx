@@ -15,13 +15,35 @@ import {
   HelpCircle,
   Package,
   RotateCw,
+  Smartphone,
+  DownloadCloud,
+  Sparkles,
 } from 'lucide-react-native';
+import { checkAppUpdate, getCurrentAppVersion, AppUpdateInfo } from '../../services/updateService';
+import AppUpdateModal from '../../components/AppUpdateModal';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, stats, logout, refreshProfile } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const currentVersion = getCurrentAppVersion();
   const spinAnim = useRef(new Animated.Value(0)).current;
+
+  const loadUpdateStatus = async () => {
+    try {
+      const info = await checkAppUpdate();
+      if (info) {
+        setUpdateInfo(info);
+      }
+    } catch {}
+  };
+
+  React.useEffect(() => {
+    loadUpdateStatus();
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -35,6 +57,7 @@ export default function ProfileScreen() {
 
     try {
       if (refreshProfile) await refreshProfile();
+      await loadUpdateStatus();
     } catch (e) {
       console.warn('Profile refresh error', e);
     } finally {
@@ -43,6 +66,29 @@ export default function ProfileScreen() {
         spinAnim.setValue(0);
         setRefreshing(false);
       }, 500);
+    }
+  };
+
+  const handleCheckForUpdates = async () => {
+    setCheckingUpdate(true);
+    try {
+      const info = await checkAppUpdate();
+      setUpdateInfo(info);
+      if (info && info.isUpdateAvailable) {
+        setShowUpdateModal(true);
+      } else {
+        Alert.alert(
+          'App is Up to Date 🎉',
+          `You are running the latest version of JharTest (v${currentVersion}). No update needed!`
+        );
+      }
+    } catch {
+      Alert.alert(
+        'Check Failed',
+        'Could not verify updates at this moment. Please check your internet connection.'
+      );
+    } finally {
+      setCheckingUpdate(false);
     }
   };
 
@@ -186,6 +232,40 @@ export default function ProfileScreen() {
             <ChevronRight size={18} color="#94A3B8" />
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={handleCheckForUpdates}
+            disabled={checkingUpdate}
+          >
+            <View style={[styles.menuIcon, { backgroundColor: '#EFF6FF' }]}>
+              <DownloadCloud size={18} color="#0072FF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.menuTitle}>App Updates & Version</Text>
+                {updateInfo?.isUpdateAvailable && (
+                  <View style={styles.updateAvailableDotBadge}>
+                    <Text style={styles.updateAvailableDotText}>NEW</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.menuSubTitle, { color: '#64748B' }]}>
+                v{currentVersion} {updateInfo?.isUpdateAvailable ? `• Update to v${updateInfo.latestVersion}` : '• Latest Version'}
+              </Text>
+            </View>
+            {checkingUpdate ? (
+              <Text style={{ fontSize: 11, color: '#0072FF', fontWeight: '700' }}>Checking...</Text>
+            ) : updateInfo?.isUpdateAvailable ? (
+              <View style={styles.updateActionBadge}>
+                <Sparkles size={11} color="#FFFFFF" />
+                <Text style={styles.updateActionBadgeText}>Update</Text>
+              </View>
+            ) : (
+              <ChevronRight size={18} color="#94A3B8" />
+            )}
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
             <View style={[styles.menuIcon, { backgroundColor: '#F8FAFC' }]}>
               <Settings size={18} color="#64748B" />
@@ -246,6 +326,13 @@ export default function ProfileScreen() {
         </View>
 
       </ScrollView>
+
+      {/* In-App Update Modal */}
+      <AppUpdateModal
+        visible={showUpdateModal}
+        updateInfo={updateInfo}
+        onDismiss={() => setShowUpdateModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -487,5 +574,31 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: '#F97316',
+  },
+  updateAvailableDotBadge: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  updateAvailableDotText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  updateActionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#0072FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  updateActionBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
   },
 });
