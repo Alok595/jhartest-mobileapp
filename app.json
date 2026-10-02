@@ -2,7 +2,7 @@
   "expo": {
     "name": "jhartest",
     "slug": "jhartest-mobile-app",
-    "version": "1.0.2",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/app-icon.png",
     "scheme": "jhartestapp",
@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "com.jhartest.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/adaptive-icon.png"
