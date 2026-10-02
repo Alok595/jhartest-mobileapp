@@ -99,6 +99,12 @@ export default function AppUpdateModal({
       const result = await downloadResumableRef.current.downloadAsync();
 
       if (result && result.uri) {
+        // Verify downloaded file size (must be valid APK > 1MB, not a 404 HTML error page)
+        const fileInfo = await FileSystem.getInfoAsync(result.uri);
+        if (fileInfo.exists && (fileInfo as any).size && (fileInfo as any).size < 1024 * 1024) {
+          throw new Error('Downloaded file is incomplete or 404 (less than 1MB). Please verify your GitHub release repository is Public.');
+        }
+
         setDownloadState('ready');
         setDownloadProgress(100);
 
@@ -118,14 +124,17 @@ export default function AppUpdateModal({
       console.warn('In-app auto download error, falling back to browser:', error);
       setDownloadState('error');
 
-      // Fallback: offer direct browser download
+      const is404 = error?.message?.includes('404') || error?.message?.includes('incomplete');
+
       Alert.alert(
-        'In-App Download Notice',
-        'Would you like to download directly via your browser?',
+        is404 ? 'Download Link Inaccessible (404)' : 'Installation Notice',
+        is404
+          ? 'GitHub returned 404 for this APK link. Please make sure your "jhartestapk-release" repository is set to PUBLIC on GitHub so phones can download it.'
+          : 'Could not automatically trigger installer. Would you like to download directly via your browser?',
         [
           { text: 'Cancel', style: 'cancel', onPress: () => setIsDownloading(false) },
           {
-            text: 'Open Browser Download',
+            text: 'Open in Browser',
             onPress: () => {
               setIsDownloading(false);
               Linking.openURL(updateInfo.apkDownloadUrl);
