@@ -7,6 +7,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { checkAppUpdate, AppUpdateInfo } from '../services/updateService';
 import AppUpdateModal from '../components/AppUpdateModal';
+import { registerForPushNotificationsAsync } from '../services/pushNotificationService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -260,7 +261,10 @@ export default function RootLayout() {
     // Transition to main app
     const timer = setTimeout(() => {
       finishSplash();
-      // Check for updates non-blocking in background after splash ends
+      // 1. Register device for real Android push notifications
+      registerForPushNotificationsAsync().catch(() => {});
+
+      // 2. Check for updates non-blocking in background after splash ends
       checkAppUpdate()
         .then((info) => {
           if (info && info.isUpdateAvailable) {

@@ -5,6 +5,7 @@ import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { setAuthToken, getMyProfile, apiClient } from '../services/api';
+import { registerForPushNotificationsAsync } from '../services/pushNotificationService';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -138,6 +139,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(profileRes.user);
         setStats(profileRes.stats);
         AsyncStorage.setItem(STORAGE_USER_KEY, JSON.stringify(profileRes.user)).catch(() => {});
+        // Ensure device push token is linked to the student
+        registerForPushNotificationsAsync().catch(() => {});
       }
     } catch (e) {
       console.warn('Failed to refresh profile', e);
