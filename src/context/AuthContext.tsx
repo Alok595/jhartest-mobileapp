@@ -160,13 +160,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (res.data?.success) {
-        // Case 1: Existing student -> Direct login!
-        if (res.data.isNewUser === false && res.data.token) {
+        // Direct instant login (existing or auto-created user)
+        if (res.data.token) {
           await savePersistedSession(res.data.token, res.data.user);
           return { success: true, isNewUser: false };
         }
 
-        // Case 2: New student -> OTP sent!
         if (res.data.isNewUser === true) {
           return { success: true, isNewUser: true, message: res.data.message };
         }
