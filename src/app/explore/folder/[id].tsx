@@ -156,11 +156,17 @@ export default function FolderExploreScreen() {
     }
   };
 
-  // Auto-redirect to My Batches when approved while in PENDING state
+  // Auto-redirect to My Batches when approved while in PENDING state (throttled to 15s, max 20 attempts)
   useEffect(() => {
     let interval: any = null;
+    let attempts = 0;
     if (!hasAccess && accessReason === 'PENDING' && user?.id) {
       interval = setInterval(async () => {
+        attempts += 1;
+        if (attempts > 20) {
+          if (interval) clearInterval(interval);
+          return;
+        }
         try {
           const res = await apiClient.get(`/orders/check-access?folderId=${id}&userId=${user.id}`);
           if (res?.data?.success && res.data.hasAccess) {
@@ -170,7 +176,7 @@ export default function FolderExploreScreen() {
             router.replace('/(tabs)/purchases');
           }
         } catch (e) {}
-      }, 4000);
+      }, 15000);
     }
     return () => {
       if (interval) clearInterval(interval);
